@@ -2,63 +2,18 @@
 <html lang="he">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>אישור הגעה</title>
-    <link rel="stylesheet" href="/static/style.css">
+    <title>בדיקה</title>
 </head>
-
 <body>
 
-<div class="container">
+<h2>בדיקה</h2>
 
-    <!-- לוגו -->
-    <img class="logo" src="https://www.or4family.org.il/wp-content/uploads/2025/11/logo-1.png" alt="לוגו אור למשפחות">
-
-    <h1>אישור הגעה</h1>
-
-    <!-- שם המשפחה -->
-    <p class="family-name">
-        משפחת <strong>{{ family_name }}</strong> היקרה,
-    </p>
-
-    <!-- טקסט כללי -->
-    <p>
-        אושרו לכם <strong>{{ tickets }}</strong> כרטיסים לאירוע
-        <strong>{{ event_name }}</strong>
-    </p>
-
-    <p>
-        בתאריך <strong>{{ event_date }}</strong>
-        בשעה <strong>{{ event_time }}</strong><br>
-        במקום <strong>{{ location }}</strong>
-    </p>
-
-    <p>אנא בחרו כמות כרטיסים:</p>
-
-    <!-- תיבת בחירה 1 עד MAX -->
-    <select id="qty" class="quantity-select">
-        {% for i in range(1, tickets + 1) %}
-            <option value="{{ i }}">{{ i }}</option>
-        {% endfor %}
-    </select>
-
-    <p>האם מגיעים?</p>
-
-    <!-- כפתורים -->
-    <div class="buttons">
-        <a class="btn yes" onclick="submit_yes()">מגיעים</a>
-        <a class="btn no" href="/thanks?status=no">לא מגיעים</a>
-    </div>
-
-</div>
-
-<!-- סקריפט לשליחה -->
-<script>
-function submit_yes() {
-    let qty = document.getElementById("qty").value;
-    window.location.href = `/thanks?status=yes&qty=${qty}`;
-}
-</script>
+<p>משפחה: {{ family_name }}</p>
+<p>כרטיסים: {{ tickets }}</p>
+<p>אירוע: {{ event_name }}</p>
+<p>תאריך: {{ event_date }}</p>
+<p>שעה: {{ event_time }}</p>
+<p>מקום: {{ location }}</p>
 
 </body>
 </html>
