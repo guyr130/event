@@ -4,11 +4,9 @@ import xml.etree.ElementTree as ET
 
 app = Flask(__name__)
 
-# ===== פרטי חיבור לזברה =====
 ZEBRA_URL = "https://25098.zebracrm.com/ext_interface.php?b=get_multi_cards_details"
 USERNAME = "IVAPP"
 PASSWORD = "1q2w3e4r"
-
 
 def get_event_data(event_id):
     xml_body = f"""
@@ -17,25 +15,20 @@ def get_event_data(event_id):
         <USERNAME>{USERNAME}</USERNAME>
         <PASSWORD>{PASSWORD}</PASSWORD>
     </PERMISSION>
-
     <ID_FILTER>{event_id}</ID_FILTER>
-
     <FIELDS>
         <EV_N></EV_N>
         <EV_D></EV_D>
         <EVE_HOUR></EVE_HOUR>
         <EVE_LOC></EVE_LOC>
     </FIELDS>
-
     <CONNECTION_CARDS>
         <CONNECTION_CARD>
             <CONNECTION_KEY>ASKEV</CONNECTION_KEY>
-
             <FIELDS>
                 <ID></ID>
                 <CO_NAME></CO_NAME>
             </FIELDS>
-
             <CON_FIELDS>
                 <TOT_FFAM></TOT_FFAM>
                 <PROV></PROV>
@@ -44,7 +37,6 @@ def get_event_data(event_id):
     </CONNECTION_CARDS>
 </ROOT>
 """
-
     response = requests.post(
         ZEBRA_URL,
         data=xml_body.encode("utf-8"),
@@ -52,7 +44,6 @@ def get_event_data(event_id):
     )
 
     raw = response.text.strip()
-
     print("===== ZEBRA RAW RESPONSE =====")
     print(raw)
     print("===== END RESPONSE =====")
@@ -83,6 +74,11 @@ def get_event_data(event_id):
     return event
 
 
+@app.route("/")
+def home():
+    return "המערכת פעילה ✔️"
+
+
 @app.route("/confirm")
 def confirm():
     event_id = request.args.get("event_id")
@@ -111,11 +107,6 @@ def confirm():
         event_id=event_id,
         family_id=family_id
     )
-
-
-@app.route("/")
-def home():
-    return "המערכת פעילה ✔️"
 
 
 if __name__ == "__main__":
