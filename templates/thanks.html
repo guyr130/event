@@ -1,16 +1,29 @@
 <!DOCTYPE html>
-<html lang="he" dir="rtl">
+<html lang="he">
 <head>
     <meta charset="UTF-8">
-    <title>אישור נקלט</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>אישור הגעה</title>
     <link rel="stylesheet" href="/static/style.css">
 </head>
+
 <body>
 
-<img src="https://www.or4family.org.il/wp-content/uploads/2025/11/logo-1.png" class="logo">
+<div class="container">
 
-<h1>{{ message }}</h1>
+    <!-- לוגו -->
+    <img class="logo" src="https://www.or4family.org.il/wp-content/uploads/2025/11/logo-1.png" alt="לוגו אור למשפחות">
+
+    <h1>אישור הגעה</h1>
+
+    {% if status == "yes" %}
+        <p class="thanks-line large">אישורכם נקלט 💙</p>
+        <p class="thanks-line">כמות שאושרה: <strong>{{ qty }}</strong></p>
+    {% else %}
+        <p class="thanks-line large">העדכון נקלט 🧡</p>
+    {% endif %}
+
+</div>
 
 </body>
 </html>
-
