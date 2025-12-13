@@ -11,55 +11,47 @@ ZEBRA_PASS = "1q2w3e4r"
 
 def get_event_data(event_id):
     xml_body = f"""
-    <ROOT>
-        <PERMISSION>
-            <USERNAME>{ZEBRA_USER}</USERNAME>
-            <PASSWORD>{ZEBRA_PASS}</PASSWORD>
-        </PERMISSION>
+<ROOT>
+    <PERMISSION>
+        <USERNAME>{ZEBRA_USER}</USERNAME>
+        <PASSWORD>{ZEBRA_PASS}</PASSWORD>
+    </PERMISSION>
 
-        <ID_FILTER>{event_id}</ID_FILTER>
+    <ID_FILTER>{event_id}</ID_FILTER>
 
-        <FIELDS>
-            <EV_N></EV_N>
-            <EV_D></EV_D>
-            <EVE_HOUR></EVE_HOUR>
-            <EVE_LOC></EVE_LOC>
-        </FIELDS>
+    <FIELDS>
+        <EV_N></EV_N>
+        <EV_D></EV_D>
+        <EVE_HOUR></EVE_HOUR>
+        <EVE_LOC></EVE_LOC>
+    </FIELDS>
 
-        <CONNECTION_CARDS>
-            <CONNECTION_CARD>
-                <CONNECTION_KEY>ASKEV</CONNECTION_KEY>
+    <CONNECTION_CARDS>
+        <CONNECTION_CARD>
+            <CONNECTION_KEY>ASKEV</CONNECTION_KEY>
 
-                <FIELDS>
-                    <ID></ID>
-                    <CO_NAME></CO_NAME>
-                </FIELDS>
+            <FIELDS>
+                <ID></ID>
+                <CO_NAME></CO_NAME>
+            </FIELDS>
 
-                <CON_FIELDS>
-                    <TOT_FFAM></TOT_FFAM>
-                    <PROV></PROV>
-                </CON_FIELDS>
-            </CONNECTION_CARD>
-        </CONNECTION_CARDS>
-    </ROOT>
-    """
+            <CON_FIELDS>
+                <TOT_FFAM></TOT_FFAM>
+                <PROV></PROV>
+            </CON_FIELDS>
+        </CONNECTION_CARD>
+    </CONNECTION_CARDS>
+</ROOT>
+""".strip()
 
     headers = {"Content-Type": "application/xml"}
-
-    # 🟦 שולחים בקשה לזברה
     response = requests.post(ZEBRA_URL, data=xml_body.encode("utf-8"), headers=headers)
 
-    # 🟥 לוג – הכי חשוב!
-    print("===== RAW RESPONSE START =====")
-    print(response.text)
-    print("===== RAW RESPONSE END =====")
-
-    # 🟥 אם ה-XML לא מתחיל ב- "<", זה לא XML
-    if not response.text.strip().startswith("<"):
+    raw = response.text.strip()
+    if raw == "" or raw.startswith("function not found"):
         return None
 
-    # 🟦 מנסים לפרש את ה־XML
-    tree = ET.fromstring(response.text)
+    tree = ET.fromstring(raw)
     card = tree.find(".//CARD")
     if card is None:
         return None
@@ -72,8 +64,7 @@ def get_event_data(event_id):
         "families": []
     }
 
-    # 🟦 כל משפחה באירוע
-    for f in card.findall(".//CONNECTIONS_CARDS/*"):
+    for f in card.findall(".//CARD_CONNECTION_*"):
         fam_id = f.findtext("ID")
         name = f.findtext(".//CO_NAME")
         tickets = f.findtext(".//TOT_FFAM")
@@ -99,7 +90,7 @@ def confirm():
 
     event = get_event_data(event_id)
     if event is None:
-        return f"שגיאה בשליפת נתוני האירוע או XML לא תקין ({event_id})", 500
+        return f"שגיאה בשליפת האירוע {event_id}", 404
 
     fam = next((f for f in event["families"] if f["id"] == family_id), None)
     if fam is None:
@@ -114,12 +105,6 @@ def confirm():
         event_time=event["event_time"],
         location=event["event_location"]
     )
-
-
-@app.route("/thanks")
-def thanks():
-    msg = request.args.get("msg", "תודה רבה")
-    return render_template("thanks.html", message=msg)
 
 
 @app.route("/")
