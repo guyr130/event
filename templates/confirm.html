@@ -2,18 +2,43 @@
 <html lang="he">
 <head>
     <meta charset="UTF-8">
-    <title>בדיקה</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>אישור הגעה</title>
+    <link rel="stylesheet" href="/static/style.css">
 </head>
+
 <body>
 
-<h2>בדיקה</h2>
+<div class="container">
 
-<p>משפחה: {{ family_name }}</p>
-<p>כרטיסים: {{ tickets }}</p>
-<p>אירוע: {{ event_name }}</p>
-<p>תאריך: {{ event_date }}</p>
-<p>שעה: {{ event_time }}</p>
-<p>מקום: {{ location }}</p>
+    <!-- לוגו -->
+    <img class="logo" src="https://www.or4family.org.il/wp-content/uploads/2025/11/logo-1.png" alt="לוגו אור למשפחות">
+
+    <h1>אישור הגעה</h1>
+
+    <p class="family-name">
+        משפחת <strong>{{ family_name }}</strong> היקרה,
+    </p>
+
+    <p>
+        אושרו לכם <strong>{{ tickets }}</strong> כרטיסים לאירוע
+        <strong>{{ event_name }}</strong>
+    </p>
+
+    <p>
+        בתאריך <strong>{{ event_date }}</strong>
+        בשעה <strong>{{ event_time }}</strong><br>
+        במקום <strong>{{ location }}</strong>
+    </p>
+
+    <p>האם מגיעים?</p>
+
+    <div class="buttons">
+        <a class="btn yes" href="/thanks?status=yes&qty={{ tickets }}">מגיעים</a>
+        <a class="btn no" href="/thanks?status=no">לא מגיעים</a>
+    </div>
+
+</div>
 
 </body>
 </html>
