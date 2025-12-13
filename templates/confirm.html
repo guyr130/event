@@ -12,7 +12,7 @@
     font-family: Arial, Helvetica, sans-serif;
     direction: rtl;
     text-align: center;
-    background:#ffffff;
+    background: #ffffff;
 ">
 
 <div style="max-width:420px; margin:0 auto; padding:20px;">
@@ -26,7 +26,9 @@
 
     <h1 style="color:#0b5fa5;">אישור הגעה</h1>
 
-    <p>משפחת <strong>{{ family_name }}</strong> היקרה,</p>
+    <p>
+        משפחת <strong>{{ family_name }}</strong> היקרה,
+    </p>
 
     <p>
         אושרו לכם <strong>{{ tickets }}</strong> כרטיסים לאירוע<br>
@@ -41,20 +43,25 @@
 
     <p style="margin-top:20px;">בחרו כמות:</p>
 
-    <select id="qty" style="
+    <select id="qtySelect" style="
         width:100%;
         max-width:260px;
         padding:12px;
         font-size:16px;
         border-radius:12px;
         border:1px solid #ccc;
-        margin:12px auto 24px auto;
+        margin:12px auto 8px auto;
         display:block;
     ">
+        <option value="">אנא בחרו כמות</option>
         {% for i in range(1, tickets + 1) %}
             <option value="{{ i }}">{{ i }}</option>
         {% endfor %}
     </select>
+
+    <div id="errorMsg" style="color:red; display:none; margin-bottom:12px;">
+        נא לבחור כמות כרטיסים
+    </div>
 
     <!-- כפתורים -->
     <div style="
@@ -66,9 +73,8 @@
         gap:12px;
     ">
 
-        <a
-           href="#"
-           onclick="goYes()"
+        <a href="#"
+           onclick="submitYes()"
            style="
                display:block;
                width:100%;
@@ -83,8 +89,7 @@
             מגיעים
         </a>
 
-        <a
-           href="/thanks?status=no"
+        <a href="/thanks?status=no"
            style="
                display:block;
                width:100%;
@@ -104,8 +109,15 @@
 </div>
 
 <script>
-function goYes() {
-    const qty = document.getElementById("qty").value;
+function submitYes() {
+    const qty = document.getElementById("qtySelect").value;
+    const error = document.getElementById("errorMsg");
+
+    if (!qty) {
+        error.style.display = "block";
+        return;
+    }
+
     window.location.href = "/thanks?status=yes&qty=" + qty;
 }
 </script>
