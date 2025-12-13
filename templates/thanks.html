@@ -17,10 +17,16 @@
     <h1>אישור הגעה</h1>
 
     {% if status == "yes" %}
-        <p class="thanks-line large">אישורכם נקלט 💙</p>
+        <p class="thanks-line large">אישורכם נקלט</p>
+
         <p class="thanks-line">כמות שאושרה: <strong>{{ qty }}</strong></p>
+
+        <p class="thanks-line">מצפים לראותכם 💙</p>
+
     {% else %}
-        <p class="thanks-line large">העדכון נקלט 🧡</p>
+        <p class="thanks-line large">העדכון נקלט</p>
+
+        <p class="thanks-line">נתראה באירועים אחרים 🧡</p>
     {% endif %}
 
 </div>
