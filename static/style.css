@@ -30,3 +30,33 @@
 .btn.no {
     background-color: #ff9800;
 }
+/* ===== FORCE CONFIRM BUTTON LAYOUT ===== */
+
+.buttons {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 14px;
+    margin-top: 20px;
+}
+
+.buttons .btn {
+    width: 220px;
+    padding: 14px 0;
+    font-size: 18px;
+    border-radius: 14px;
+    text-align: center;
+    text-decoration: none;
+}
+
+/* מגיעים */
+.buttons .yes {
+    background-color: #0b5ed7;
+    color: white;
+}
+
+/* לא מגיעים */
+.buttons .no {
+    background-color: #f59e0b;
+    color: white;
+}
