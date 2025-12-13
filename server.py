@@ -18,7 +18,7 @@ def home():
 # -----------------------------------------------------
 @app.route("/confirm")
 def confirm():
-    # נתונים לדוגמה — יוחלפו בקריאה מהזברה בהמשך
+    # נתונים לדוגמה – בהמשך ישלפו מהזברה
     family_name = "רייטר"
     tickets = 5
     event_name = "אירוע חנוכה"
@@ -37,19 +37,14 @@ def confirm():
     )
 
 # -----------------------------------------------------
-# דף תודה (Thanks)
+# דף הת THANKS (הודעה לאחר לחיצה)
 # -----------------------------------------------------
 @app.route("/thanks")
 def thanks():
     status = request.args.get("s")  # yes / no
-    qty = request.args.get("q")     # כמות נבחרת
+    qty = request.args.get("q")     # כמות שנבחרה
 
-    if status == "yes":
-        message = f"אישורך נקלט 💙 (כמות שאושרה: {qty})"
-    else:
-        message = "העדכון נקלט 🧡"
-
-    return render_template("thanks.html", message=message)
+    return render_template("thanks.html", status=status, qty=qty)
 
 # -----------------------------------------------------
 # הרצת השרת
