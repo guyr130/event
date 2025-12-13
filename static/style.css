@@ -1,97 +1,32 @@
-/* דף מלא ממורכז */
-body {
-    direction: rtl;
-    font-family: Arial, sans-serif;
-    margin: 0;
-    padding: 0;
-    background: #ffffff;
+/* ===== אזור כפתורים ===== */
+.buttons {
     display: flex;
-    justify-content: center;
-    align-items: flex-start;
-    min-height: 100vh;
+    flex-direction: column;   /* אחד מתחת לשני */
+    align-items: center;      /* מרכז אופקי */
+    gap: 14px;                /* רווח בין הכפתורים */
+    margin-top: 20px;
 }
 
-.container {
-    width: 320px;   /* הצרה מטשטשת סטיות ומייצרת סימטריה */
-    text-align: center;
-    padding: 10px;
-}
-
-/* לוגו */
-.logo {
-    width: 260px;
-    display: block;
-    margin: 0 auto 20px auto;
-}
-
-/* כותרת */
-h1 {
-    color: #005ca8;
-    font-size: 28px;
-    margin: 0 0 20px 0;
-}
-
-/* טקסט */
-.line {
-    font-size: 18px;
-    line-height: 1.5;
-    margin: 6px 0;
-}
-
-/* בחרו כמות */
-.select-wrapper {
-    margin: 20px auto 15px auto;
-}
-
-select {
-    width: 200px;
-    padding: 10px;
-    font-size: 18px;
-    border-radius: 10px;
-    border: 1px solid #999;
-    text-align: center;
-    display: block;
-    margin: 0 auto;
-}
-
-/* כפתורים */
+/* ===== כפתור בסיס ===== */
 .btn {
-    width: 260px; 
-    padding: 15px 0;
-    font-size: 22px;
-    border-radius: 14px;
-    border: none;
-    cursor: pointer;
-    margin: 12px auto;
+    width: 85%;               /* רוחב נוח במובייל */
+    max-width: 320px;         /* לא רחב מדי בדסקטופ */
+    padding: 14px 0;
+    font-size: 18px;
     font-weight: bold;
+    border-radius: 12px;
+    text-align: center;
+    text-decoration: none;
+    color: white;
     display: block;
 }
 
-/* צבעים */
-.yes {
-    background: #005ca8;
-    color: white;
+/* ===== מגיעים ===== */
+.btn.yes {
+    background-color: #0a5bd3;
 }
 
-.no {
-    background: #ff8c00;
-    color: white;
-}
-
-/* הודעה */
-.message {
-    display: none;
-    margin-top: 30px;
-    font-size: 22px;
-    font-weight: bold;
-}
-.thanks-line {
-    font-size: 22px;
-    margin: 10px 0;
-    text-align: center;
-}
-
-.thanks-line.large {
-    font-size: 26px;
-    font-weight: bold;
+/* ===== לא מגיעים ===== */
+.btn.no {
+    background-color: #ff9800;
 }
