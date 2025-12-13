@@ -18,7 +18,6 @@ def get_event_data(event_id):
         <PASSWORD>{ZEBRA_PASS}</PASSWORD>
     </PERMISSION>
 
-    <CARD_TYPE_FILTER>EVEFAM</CARD_TYPE_FILTER>
     <ID_FILTER>{event_id}</ID_FILTER>
 
     <FIELDS>
@@ -41,6 +40,7 @@ def get_event_data(event_id):
                 <TOT_FFAM></TOT_FFAM>
                 <PROV></PROV>
             </CON_FIELDS>
+
         </CONNECTION_CARD>
     </CONNECTION_CARDS>
 
@@ -48,49 +48,43 @@ def get_event_data(event_id):
 """
 
     headers = {"Content-Type": "application/xml"}
-
-    print("===== XML SENT =====")
-    print(xml_body)
-    print("=====================")
-
     response = requests.post(ZEBRA_URL, data=xml_body.encode("utf-8"), headers=headers)
 
-    print("===== ZEBRA RAW RESPONSE =====")
-    print(response.text)
-    print("==============================")
-
-    # Parse XML safely
+    # ניסיון פרסינג
     try:
         root = ET.fromstring(response.text)
-    except Exception as e:
-        print("XML PARSE ERROR:", e)
+    except:
+        print("XML ERROR:", response.text)
         return None
 
     card = root.find(".//CARD")
     if card is None:
         return None
 
+    # נתוני האירוע
     event_data = {
-        "event_name": card.findtext(".//EV_N", default=""),
-        "event_date": card.findtext(".//EV_D", default=""),
-        "event_time": card.findtext(".//EVE_HOUR", default=""),
-        "event_location": card.findtext(".//EVE_LOC", default=""),
+        "event_name": card.findtext("FIELDS/EV_N", ""),
+        "event_date": card.findtext("FIELDS/EV_D", ""),
+        "event_time": card.findtext("FIELDS/EVE_HOUR", ""),
+        "event_location": card.findtext("FIELDS/EVE_LOC", ""),
         "families": []
     }
 
-    # Iterate over ASKEV connections
-    for conn in card.findall(".//CARD_CONNECTION"):
-        fam_id = conn.findtext("FIELDS/ID")
-        fam_name = conn.findtext("FIELDS/CO_NAME")
-        tickets = conn.findtext("CON_FIELDS/TOT_FFAM")
-        approved = conn.findtext("CON_FIELDS/PROV")
+    # שליפת כל קשרי ASKEV לפי תגיות CARD_CONNECTION_XXXX
+    for f in card.find("CONNECTIONS_CARDS").iter():
+        if f.tag.startswith("CARD_CONNECTION_"):
 
-        event_data["families"].append({
-            "id": fam_id,
-            "family_name": fam_name,
-            "tickets_approved": tickets,
-            "approved": approved
-        })
+            fam_id = f.findtext("ID", "")
+            fam_name = f.findtext("FIELDS/CO_NAME", "")
+            tickets = f.findtext("CON_FIELDS/TOT_FFAM", "0")
+            approved = f.findtext("CON_FIELDS/PROV", "")
+
+            event_data["families"].append({
+                "id": fam_id,
+                "family_name": fam_name,
+                "tickets_approved": tickets,
+                "approved": approved
+            })
 
     return event_data
 
