@@ -120,8 +120,15 @@ def confirm():
 
 @app.route("/thanks")
 def thanks():
-    msg = request.args.get("msg", "תודה רבה")
-    return render_template("thanks.html", message=msg)
+    status = request.args.get("status")  # yes / no
+    qty = request.args.get("qty")         # כמות שנבחרה
+
+    return render_template(
+        "thanks.html",
+        status=status,
+        qty=qty
+    )
+
 
 
 @app.route("/")
