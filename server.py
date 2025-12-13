@@ -54,7 +54,7 @@ def get_event_data(event_id):
                 </CON_FIELDS>
 
                 <CON_FILTERS>
-                    <PROV>1</PROV> <!-- רק משפחות שאושרו -->
+                    <PROV>1</PROV>
                 </CON_FILTERS>
             </CONNECTION_CARD>
         </CONNECTION_CARDS>
@@ -64,7 +64,6 @@ def get_event_data(event_id):
     response = requests.post(ZEBRA_URL, data=xml_request.encode("utf-8"))
     xml = ET.fromstring(response.text)
 
-    # נתוני האירוע
     fields = xml.find(".//CARD/FIELDS")
 
     event_info = {
@@ -74,7 +73,6 @@ def get_event_data(event_id):
         "event_location": fields.findtext("EVE_LOC", "")
     }
 
-    # נתוני משפחות
     families = []
 
     for con in xml.findall(".//CONNECTION_CARD"):
@@ -93,7 +91,7 @@ def get_event_data(event_id):
 
 
 # ----------------------------------------
-# דף הבית — מפנה ל /confirm
+# דף הבית
 # ----------------------------------------
 @app.route("/")
 def home():
@@ -105,19 +103,30 @@ def home():
 
 
 # ----------------------------------------
-# דף אישור הגעה (כרגע עדיין נתונים ידניים)
-# הדינמיקה עם זברה תהיה בשלב הבא
+# דף אישור הגעה דינמי
 # ----------------------------------------
 @app.route("/confirm")
 def confirm():
 
-    # כרגע לא דינמי — בשלב הבא נחבר ל-get_event_data
-    family_name = "רייטר"
-    tickets = 5
-    event_name = "אירוע חנוכה"
-    event_date = "18.12"
-    event_time = "19:00"
-    location = "תל אביב"
+    event_id = request.args.get("event_id")
+    family_id = request.args.get("family_id")
+
+    if not event_id or not family_id:
+        return "חסר event_id או family_id בקישור", 400
+
+    event = get_event_data(event_id)
+
+    fam = next((f for f in event["families"] if f["id"] == family_id), None)
+
+    if fam is None:
+        return f"לא נמצאה משפחה {family_id} באירוע {event_id}", 404
+
+    family_name = fam["family_name"]
+    tickets = int(fam["tickets_approved"]) if fam["tickets_approved"] else 0
+    event_name = event["event_name"]
+    event_date = event["event_date"]
+    event_time = event["event_time"]
+    location = event["event_location"]
 
     return render_template(
         "confirm.html",
@@ -131,13 +140,12 @@ def confirm():
 
 
 # ----------------------------------------
-# דף תודה (מגיעים / לא מגיעים)
+# דף תודה
 # ----------------------------------------
 @app.route("/thanks")
 def thanks():
-    status = request.args.get("s")  # yes / no
-    qty = request.args.get("q")     # כמות הגעה הנבחרת
-
+    status = request.args.get("s")
+    qty = request.args.get("q")
     return render_template("thanks.html", status=status, qty=qty)
 
 
