@@ -4,10 +4,11 @@ import xml.etree.ElementTree as ET
 
 app = Flask(__name__)
 
-# ------ פרטי חיבור לזברה ------
+# ===== פרטי חיבור לזברה =====
 ZEBRA_URL = "https://25098.zebracrm.com/ext_interface.php?b=get_multi_cards_details"
 USERNAME = "IVAPP"
 PASSWORD = "1q2w3e4r"
+
 
 def get_event_data(event_id):
     xml_body = f"""
@@ -51,6 +52,7 @@ def get_event_data(event_id):
     )
 
     raw = response.text.strip()
+
     print("===== ZEBRA RAW RESPONSE =====")
     print(raw)
     print("===== END RESPONSE =====")
@@ -90,6 +92,7 @@ def confirm():
         return "חסר event_id או family_id", 400
 
     data = get_event_data(event_id)
+
     if "error" in data:
         return f"שגיאה בשליפת נתונים: {data['error']}", 500
 
@@ -105,8 +108,8 @@ def confirm():
         event_date=data["event_date"],
         event_time=data["event_time"],
         location=data["event_location"],
-        family_id=family_id,
-        event_id=event_id
+        event_id=event_id,
+        family_id=family_id
     )
 
 
