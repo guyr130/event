@@ -10,62 +10,63 @@ ZEBRA_PASS = "1q2w3e4r"
 
 
 def get_event_data(event_id):
+
     xml_body = f"""
-    <ROOT>
-        <PERMISSION>
-            <USERNAME>{ZEBRA_USER}</USERNAME>
-            <PASSWORD>{ZEBRA_PASS}</PASSWORD>
-        </PERMISSION>
+<ROOT>
+    <PERMISSION>
+        <USERNAME>{ZEBRA_USER}</USERNAME>
+        <PASSWORD>{ZEBRA_PASS}</PASSWORD>
+    </PERMISSION>
 
-        <ID_FILTER>{event_id}</ID_FILTER>
+    <CARD_TYPE_FILTER>EVEFAM</CARD_TYPE_FILTER>
+    <ID_FILTER>{event_id}</ID_FILTER>
 
-        <FIELDS>
-            <EV_N></EV_N>
-            <EV_D></EV_D>
-            <EVE_HOUR></EVE_HOUR>
-            <EVE_LOC></EVE_LOC>
-        </FIELDS>
+    <FIELDS>
+        <EV_N></EV_N>
+        <EV_D></EV_D>
+        <EVE_HOUR></EVE_HOUR>
+        <EVE_LOC></EVE_LOC>
+    </FIELDS>
 
-        <CONNECTION_CARDS>
-            <CONNECTION_CARD>
-                <CONNECTION_KEY>ASKEV</CONNECTION_KEY>
+    <CONNECTION_CARDS>
+        <CONNECTION_CARD>
+            <CONNECTION_KEY>ASKEV</CONNECTION_KEY>
 
-                <FIELDS>
-                    <ID></ID>
-                    <CO_NAME></CO_NAME>
-                </FIELDS>
+            <FIELDS>
+                <ID></ID>
+                <CO_NAME></CO_NAME>
+            </FIELDS>
 
-                <CON_FIELDS>
-                    <TOT_FFAM></TOT_FFAM>
-                    <PROV></PROV>
-                </CON_FIELDS>
-            </CONNECTION_CARD>
-        </CONNECTION_CARDS>
-    </ROOT>
-    """
+            <CON_FIELDS>
+                <TOT_FFAM></TOT_FFAM>
+                <PROV></PROV>
+            </CON_FIELDS>
+        </CONNECTION_CARD>
+    </CONNECTION_CARDS>
+
+</ROOT>
+"""
 
     headers = {"Content-Type": "application/xml"}
 
-    # ===== 🟦 לוג חשוב מאוד — מדפיס מה שזברה מחזירה =====
-    print("===== XML SENT TO ZEBRA =====")
+    print("===== XML SENT =====")
     print(xml_body)
-    print("===== END SENT =====")
+    print("=====================")
 
     response = requests.post(ZEBRA_URL, data=xml_body.encode("utf-8"), headers=headers)
 
     print("===== ZEBRA RAW RESPONSE =====")
-    print(response.text)     # <<< הדבר הכי חשוב!
-    print("===== END RESPONSE =====")
+    print(response.text)
+    print("==============================")
 
-    # אם לא XML — מפיל עם הודעת שגיאה ברורה
+    # Parse XML safely
     try:
-        tree = ET.fromstring(response.text)
+        root = ET.fromstring(response.text)
     except Exception as e:
-        print("===== XML PARSE ERROR =====")
-        print(str(e))
+        print("XML PARSE ERROR:", e)
         return None
 
-    card = tree.find(".//CARD")
+    card = root.find(".//CARD")
     if card is None:
         return None
 
@@ -77,16 +78,16 @@ def get_event_data(event_id):
         "families": []
     }
 
-    # שליפת משפחות
-    for f in tree.findall(".//CARD_CONNECTION_*"):
-        fam_id = f.findtext("ID")
-        name = f.findtext(".//CO_NAME")
-        tickets = f.findtext(".//TOT_FFAM")
-        approved = f.findtext(".//PROV")
+    # Iterate over ASKEV connections
+    for conn in card.findall(".//CARD_CONNECTION"):
+        fam_id = conn.findtext("FIELDS/ID")
+        fam_name = conn.findtext("FIELDS/CO_NAME")
+        tickets = conn.findtext("CON_FIELDS/TOT_FFAM")
+        approved = conn.findtext("CON_FIELDS/PROV")
 
         event_data["families"].append({
             "id": fam_id,
-            "family_name": name,
+            "family_name": fam_name,
             "tickets_approved": tickets,
             "approved": approved
         })
@@ -113,18 +114,12 @@ def confirm():
     return render_template(
         "confirm.html",
         family_name=fam["family_name"],
-        tickets=int(fam["tickets_approved"]),
+        tickets=fam["tickets_approved"],
         event_name=event["event_name"],
         event_date=event["event_date"],
         event_time=event["event_time"],
         location=event["event_location"]
     )
-
-
-@app.route("/thanks")
-def thanks():
-    msg = request.args.get("msg", "תודה רבה")
-    return render_template("thanks.html", message=msg)
 
 
 @app.route("/")
