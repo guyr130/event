@@ -15,7 +15,8 @@ def get_event_family_data(event_id, family_id):
         "event_name": "מחזקים ומתחזקים",
         "date": "18/12/2025",
         "time": "18:00",
-        "location": "דן פנורמה ת"א",
+      "location": "תל אביב",
+
         "tickets": "4"
     }
 
