@@ -36,20 +36,22 @@
 
     {% if status == "yes" %}
 
-        <h2 style="color:#0b5fa5; margin-bottom:16px;">
+        <!-- הודעת מגיעים – הכול בכחול -->
+        <h2 style="color:#0b5fa5; margin-bottom:18px;">
             אישורכם נקלט בהצלחה
         </h2>
 
-        <p style="font-size:18px; margin-bottom:12px;">
-            כמות מאושרת: <strong>{{ qty }}</strong>
+        <p style="font-size:18px; color:#0b5fa5; margin-bottom:12px;">
+            כמות מאושרת: <strong>{{ qty }}</strong> כרטיסים
         </p>
 
-        <p style="font-size:18px;">
-            מחכים לראותכם באירוע 💙
+        <p style="font-size:18px; color:#0b5fa5;">
+            מחכים לכם באירוע 💙
         </p>
 
     {% else %}
 
+        <!-- הודעת לא מגיעים – נשארת תקינה -->
         <h2 style="color:#ff9800; margin-bottom:16px;">
             העדכון נקלט בהצלחה
         </h2>
