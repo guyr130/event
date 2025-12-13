@@ -39,16 +39,25 @@ def get_event_data(event_id):
                 <TOT_FFAM></TOT_FFAM>
                 <PROV></PROV>
             </CON_FIELDS>
-        </CONNECTION_CARD>
+        </CON_CONNECTION_CARD>
     </CONNECTION_CARDS>
 </ROOT>
 """.strip()
 
     headers = {"Content-Type": "application/xml"}
+
+    # שליחת הבקשה לזברה
     response = requests.post(ZEBRA_URL, data=xml_body.encode("utf-8"), headers=headers)
 
+    # הדפסת תגובה גולמית ללוג (הדבר שהיה חסר!)
+    print("\n===== RAW XML FROM ZEBRA =====")
+    print(response.text)
+    print("===== END RAW XML =====\n")
+
     raw = response.text.strip()
-    if raw == "" or raw.startswith("function not found"):
+
+    # אם זברה מחזירה טעות / ריק / function not found
+    if raw == "" or "function not found" in raw.lower():
         return None
 
     tree = ET.fromstring(raw)
@@ -64,6 +73,7 @@ def get_event_data(event_id):
         "families": []
     }
 
+    # כל המשפחות שמחוברות לאירוע
     for f in card.findall(".//CARD_CONNECTION_*"):
         fam_id = f.findtext("ID")
         name = f.findtext(".//CO_NAME")
@@ -105,6 +115,12 @@ def confirm():
         event_time=event["event_time"],
         location=event["event_location"]
     )
+
+
+@app.route("/thanks")
+def thanks():
+    msg = request.args.get("msg", "תודה רבה")
+    return render_template("thanks.html", message=msg)
 
 
 @app.route("/")
