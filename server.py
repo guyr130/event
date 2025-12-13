@@ -43,6 +43,16 @@ def get_event_data(event_id):
     """
 
     response = requests.post(ZEBRA_URL, data=xml_body.encode("utf-8"))
+
+    # 🔥 DEBUG — נדפיס את התגובה של זברה ללוג
+    print("===== ZEBRA RAW RESPONSE =====")
+    print(response.text)
+    print("===== END RESPONSE =====")
+
+    # 💥 אם זברה מחזירה ריק / HTML — לא נתרסק
+    if not response.text.strip().startswith("<"):
+        return None
+
     tree = ET.fromstring(response.text)
 
     card = tree.find(".//CARD")
@@ -117,7 +127,7 @@ def confirm():
 
     data = get_event_data(event_id)
     if not data:
-        return f"שגיאה בטעינת האירוע {event_id}"
+        return f"שגיאה בטעינת האירוע {event_id} — לא התקבלה תגובה תקינה מה־API"
 
     fam = next((f for f in data["families"]
                 if f["id"] == family_id and f["approved"]), None)
