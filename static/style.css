@@ -1,59 +1,84 @@
+/* כל הדף ממורכז בצורה מושלמת */
 body {
-    text-align: center;
-    font-family: Arial, sans-serif;
-    background: white;
     direction: rtl;
+    font-family: Arial, sans-serif;
+    margin: 0;
+    padding: 0;
+    background: #ffffff;
+    text-align: center;
 }
 
+.container {
+    max-width: 350px;
+    margin: 0 auto;
+    padding: 15px;
+}
+
+/* ----- לוגו ----- */
 .logo {
-    width: 230px;
-    margin: 20px auto;
+    width: 260px;    /* הרוחב הסופי – משמש גם לרוחב כפתורים */
     display: block;
+    margin: 0 auto 20px auto;
 }
 
+/* ----- כותרת ----- */
 h1 {
-    color: #004f9f;
-    margin-top: 10px;
+    color: #005ca8;
+    font-size: 28px;
+    margin-bottom: 20px;
 }
 
-p {
-    font-size: 20px;
+/* ----- טקסטים ----- */
+.line {
+    font-size: 18px;
+    line-height: 1.6;
+    margin: 5px 0;
 }
 
-.label {
-    font-size: 20px;
-    margin-top: 15px;
-    display: block;
+/* ----- בחירת כמות ----- */
+.select-wrapper {
+    margin: 20px auto;
 }
 
 select {
-    font-size: 20px;
-    padding: 8px;
-    margin: 10px auto 25px auto;
+    width: 180px;
+    font-size: 18px;
+    padding: 10px;
+    border-radius: 10px;
+    border: 1px solid #999;
+    margin: 0 auto;
+    display: block;
 }
 
-.buttons {
-    display: flex;
-    flex-direction: column;
-    gap: 15px;
-    align-items: center;
-}
-
+/* ----- כפתורים ----- */
 .btn {
-    font-size: 28px;
-    padding: 15px 40px;
-    border-radius: 12px;
+    width: 260px; /* שווה ללוגו */
+    padding: 15px 0;
+    font-size: 22px;
+    border-radius: 14px;
     border: none;
     cursor: pointer;
-    width: auto; /* רוחב מותאם למלל */
+    margin: 10px auto;
+    display: block;
+    text-align: center;
+    font-weight: bold;
 }
 
+/* צבעים */
 .yes {
-    background-color: #005ca8;
+    background: #005ca8;
     color: white;
 }
 
 .no {
-    background-color: #ff8c00;
+    background: #ff8c00;
     color: white;
+}
+
+/* הודעה אחרי לחיצה */
+.message {
+    display: none;
+    margin-top: 30px;
+    font-size: 22px;
+    font-weight: bold;
 }
