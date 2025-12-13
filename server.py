@@ -45,9 +45,26 @@ def get_event_data(event_id):
     """
 
     headers = {"Content-Type": "application/xml"}
+
+    # ===== 🟦 לוג חשוב מאוד — מדפיס מה שזברה מחזירה =====
+    print("===== XML SENT TO ZEBRA =====")
+    print(xml_body)
+    print("===== END SENT =====")
+
     response = requests.post(ZEBRA_URL, data=xml_body.encode("utf-8"), headers=headers)
 
-    tree = ET.fromstring(response.text)
+    print("===== ZEBRA RAW RESPONSE =====")
+    print(response.text)     # <<< הדבר הכי חשוב!
+    print("===== END RESPONSE =====")
+
+    # אם לא XML — מפיל עם הודעת שגיאה ברורה
+    try:
+        tree = ET.fromstring(response.text)
+    except Exception as e:
+        print("===== XML PARSE ERROR =====")
+        print(str(e))
+        return None
+
     card = tree.find(".//CARD")
     if card is None:
         return None
@@ -60,21 +77,19 @@ def get_event_data(event_id):
         "families": []
     }
 
-    # 🎯 תיקון משמעותי — כאן הייתה הבעיה!
-    connections_parent = card.find("CONNECTIONS_CARDS")
-    if connections_parent is not None:
-        for f in connections_parent:
-            fam_id = f.findtext("ID")
-            name = f.findtext("FIELDS/CO_NAME")
-            tickets = f.findtext("CON_FIELDS/TOT_FFAM")
-            approved = f.findtext("CON_FIELDS/PROV")
+    # שליפת משפחות
+    for f in tree.findall(".//CARD_CONNECTION_*"):
+        fam_id = f.findtext("ID")
+        name = f.findtext(".//CO_NAME")
+        tickets = f.findtext(".//TOT_FFAM")
+        approved = f.findtext(".//PROV")
 
-            event_data["families"].append({
-                "id": fam_id,
-                "family_name": name,
-                "tickets_approved": tickets,
-                "approved": approved
-            })
+        event_data["families"].append({
+            "id": fam_id,
+            "family_name": name,
+            "tickets_approved": tickets,
+            "approved": approved
+        })
 
     return event_data
 
