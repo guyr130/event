@@ -1,67 +1,70 @@
-/* כל הדף ממורכז בצורה מושלמת */
+/* דף מלא ממורכז */
 body {
     direction: rtl;
     font-family: Arial, sans-serif;
     margin: 0;
     padding: 0;
     background: #ffffff;
-    text-align: center;
+    display: flex;
+    justify-content: center;
+    align-items: flex-start;
+    min-height: 100vh;
 }
 
 .container {
-    max-width: 350px;
-    margin: 0 auto;
-    padding: 15px;
+    width: 320px;   /* הצרה מטשטשת סטיות ומייצרת סימטריה */
+    text-align: center;
+    padding: 10px;
 }
 
-/* ----- לוגו ----- */
+/* לוגו */
 .logo {
-    width: 260px;    /* הרוחב הסופי – משמש גם לרוחב כפתורים */
+    width: 260px;
     display: block;
     margin: 0 auto 20px auto;
 }
 
-/* ----- כותרת ----- */
+/* כותרת */
 h1 {
     color: #005ca8;
     font-size: 28px;
-    margin-bottom: 20px;
+    margin: 0 0 20px 0;
 }
 
-/* ----- טקסטים ----- */
+/* טקסט */
 .line {
     font-size: 18px;
-    line-height: 1.6;
-    margin: 5px 0;
+    line-height: 1.5;
+    margin: 6px 0;
 }
 
-/* ----- בחירת כמות ----- */
+/* בחרו כמות */
 .select-wrapper {
-    margin: 20px auto;
+    margin: 20px auto 15px auto;
 }
 
 select {
-    width: 180px;
-    font-size: 18px;
+    width: 200px;
     padding: 10px;
+    font-size: 18px;
     border-radius: 10px;
     border: 1px solid #999;
-    margin: 0 auto;
+    text-align: center;
     display: block;
+    margin: 0 auto;
 }
 
-/* ----- כפתורים ----- */
+/* כפתורים */
 .btn {
-    width: 260px; /* שווה ללוגו */
+    width: 260px; 
     padding: 15px 0;
     font-size: 22px;
     border-radius: 14px;
     border: none;
     cursor: pointer;
-    margin: 10px auto;
-    display: block;
-    text-align: center;
+    margin: 12px auto;
     font-weight: bold;
+    display: block;
 }
 
 /* צבעים */
@@ -75,7 +78,7 @@ select {
     color: white;
 }
 
-/* הודעה אחרי לחיצה */
+/* הודעה */
 .message {
     display: none;
     margin-top: 30px;
