@@ -1,62 +1,37 @@
-<!DOCTYPE html>
-<html lang="he">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>אישור הגעה</title>
-    <link rel="stylesheet" href="/static/style.css">
-</head>
+@app.route("/confirm")
+def confirm():
 
-<body>
+    # קבלת מזהים מהקישור
+    event_id = request.args.get("event_id")
+    family_id = request.args.get("family_id")
 
-<div class="container">
+    # אם לא הגיעו מזהים – שגיאה ברורה
+    if not event_id or not family_id:
+        return "חסר event_id או family_id בקישור", 400
 
-    <!-- לוגו -->
-    <img class="logo" src="https://www.or4family.org.il/wp-content/uploads/2025/11/logo-1.png" alt="לוגו אור למשפחות">
+    # שליפה מהזברה
+    event = get_event_data(event_id)
 
-    <h1>אישור הגעה</h1>
+    # ניסיון לאתר משפחה מתוך ASKEV
+    fam = next((f for f in event["families"] if f["id"] == family_id), None)
 
-    <p class="line">משפחת <strong>{{ family_name }}</strong> היקרה,</p>
+    if fam is None:
+        return f"לא נמצאה משפחה {family_id} באירוע {event_id}", 404
 
-    <p class="line">
-        אושרו לכם <strong>{{ tickets }}</strong> כרטיסים לאירוע <strong>{{ event_name }}</strong>.
-    </p>
+    # נתונים אמיתיים מתוך הזברה
+    family_name = fam["family_name"]
+    tickets = int(fam["tickets_approved"]) if fam["tickets_approved"] else 0
+    event_name = event["event_name"]
+    event_date = event["event_date"]
+    event_time = event["event_time"]
+    location = event["event_location"]
 
-    <p class="line">
-        בתאריך <strong>{{ event_date }}</strong> בשעה <strong>{{ event_time }}</strong>
-    </p>
-
-    <p class="line">
-        במקום <strong>{{ location }}</strong>
-    </p>
-
-    <div class="select-wrapper">
-        <label>בחרו כמות הגעה:</label>
-        <select id="ticketAmount">
-            <option value="" disabled selected>אנא בחרו כמות</option>
-            {% for i in range(1, tickets + 1) %}
-            <option value="{{ i }}">{{ i }}</option>
-            {% endfor %}
-        </select>
-    </div>
-
-    <button class="btn yes" onclick="submitResponse('yes')">מגיעים 💙</button>
-    <button class="btn no" onclick="submitResponse('no')">לא מגיעים 🧡</button>
-
-</div>
-
-<script>
-function submitResponse(status) {
-    const qty = document.getElementById('ticketAmount').value;
-
-    if (!qty) {
-        alert("נא לבחור כמות הגעה");
-        return;
-    }
-
-    window.location.href = `/thanks?s=${status}&q=${qty}`;
-}
-</script>
-
-</body>
-</html>
+    return render_template(
+        "confirm.html",
+        family_name=family_name,
+        tickets=tickets,
+        event_name=event_name,
+        event_date=event_date,
+        event_time=event_time,
+        location=location
+    )
