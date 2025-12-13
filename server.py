@@ -4,12 +4,14 @@ import xml.etree.ElementTree as ET
 
 app = Flask(__name__)
 
-ZEBRA_URL = "https://25098.zebracrm.com/ext_interface.php"
+# === כתובת API הנכונה של זברה כולל הפעולה b ===
+ZEBRA_URL = "https://25098.zebracrm.com/ext_interface.php?b=get_multi_cards_details"
 ZEBRA_USER = "IVAPP"
 ZEBRA_PASS = "1q2w3e4r"
 
 
 def get_event_data(event_id):
+    # === הגוף של ה-XML שאנו שולחים לזברה ===
     xml_body = f"""
 <ROOT>
     <PERMISSION>
@@ -39,32 +41,35 @@ def get_event_data(event_id):
                 <TOT_FFAM></TOT_FFAM>
                 <PROV></PROV>
             </CON_FIELDS>
-        </CON_CONNECTION_CARD>
+        </CONNECTION_CARD>
     </CONNECTION_CARDS>
 </ROOT>
 """.strip()
 
     headers = {"Content-Type": "application/xml"}
 
-    # שליחת הבקשה לזברה
+    # === שליחת הבקשה ל-Zebra ===
     response = requests.post(ZEBRA_URL, data=xml_body.encode("utf-8"), headers=headers)
 
-    # הדפסת תגובה גולמית ללוג (הדבר שהיה חסר!)
+    # === הדפסת ה-XML האמיתי שמגיע מהשרת כדי שנראה מה קורה ===
     print("\n===== RAW XML FROM ZEBRA =====")
     print(response.text)
     print("===== END RAW XML =====\n")
 
     raw = response.text.strip()
 
-    # אם זברה מחזירה טעות / ריק / function not found
+    # === אם אין נתונים או שהפעולה לא קיימת ===
     if raw == "" or "function not found" in raw.lower():
         return None
 
     tree = ET.fromstring(raw)
+
+    # איתור הכרטיס עם נתוני האירוע
     card = tree.find(".//CARD")
     if card is None:
         return None
 
+    # === שליפת נתוני האירוע ===
     event_data = {
         "event_name": card.findtext(".//EV_N", default=""),
         "event_date": card.findtext(".//EV_D", default=""),
@@ -73,7 +78,7 @@ def get_event_data(event_id):
         "families": []
     }
 
-    # כל המשפחות שמחוברות לאירוע
+    # === שליפת כל המשפחות (Connections) ===
     for f in card.findall(".//CARD_CONNECTION_*"):
         fam_id = f.findtext("ID")
         name = f.findtext(".//CO_NAME")
