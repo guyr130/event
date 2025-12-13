@@ -60,18 +60,21 @@ def get_event_data(event_id):
         "families": []
     }
 
-    for f in card.findall(".//CARD_CONNECTION_*/"):
-        fam_id = f.findtext("ID")
-        name = f.findtext(".//CO_NAME")
-        tickets = f.findtext(".//TOT_FFAM")
-        approved = f.findtext(".//PROV")
+    # 🎯 תיקון משמעותי — כאן הייתה הבעיה!
+    connections_parent = card.find("CONNECTIONS_CARDS")
+    if connections_parent is not None:
+        for f in connections_parent:
+            fam_id = f.findtext("ID")
+            name = f.findtext("FIELDS/CO_NAME")
+            tickets = f.findtext("CON_FIELDS/TOT_FFAM")
+            approved = f.findtext("CON_FIELDS/PROV")
 
-        event_data["families"].append({
-            "id": fam_id,
-            "family_name": name,
-            "tickets_approved": tickets,
-            "approved": approved
-        })
+            event_data["families"].append({
+                "id": fam_id,
+                "family_name": name,
+                "tickets_approved": tickets,
+                "approved": approved
+            })
 
     return event_data
 
