@@ -1,62 +1,79 @@
-/* ===== אזור כפתורים ===== */
+/* בסיס */
+body {
+    margin: 0;
+    padding: 0;
+    font-family: Arial, Helvetica, sans-serif;
+    background: #ffffff;
+    direction: rtl;
+    text-align: center;
+}
+
+.container {
+    max-width: 420px;
+    margin: 0 auto;
+    padding: 20px;
+}
+
+/* ===== לוגו ===== */
+.logo {
+    display: block;
+    max-width: 260px;   /* שליטה בגודל */
+    width: 100%;
+    height: auto;       /* שמירה על פרופורציות */
+    margin: 0 auto 20px auto;
+}
+
+/* כותרות וטקסט */
+h1 {
+    color: #0b5fa5;
+    margin-bottom: 10px;
+}
+
+p {
+    font-size: 16px;
+    line-height: 1.5;
+    margin: 8px 0;
+}
+
+/* בחירת כמות */
+select {
+    width: 100%;
+    max-width: 220px;
+    padding: 10px;
+    font-size: 16px;
+    border-radius: 10px;
+    border: 1px solid #ccc;
+    margin: 12px auto 20px auto;
+    display: block;
+}
+
+/* ===== כפתורים ===== */
 .buttons {
     display: flex;
     flex-direction: column;   /* אחד מתחת לשני */
-    align-items: center;      /* מרכז אופקי */
-    gap: 14px;                /* רווח בין הכפתורים */
-    margin-top: 20px;
+    gap: 12px;
+    align-items: center;
 }
 
-/* ===== כפתור בסיס ===== */
+/* כפתור בסיס */
 .btn {
-    width: 85%;               /* רוחב נוח במובייל */
-    max-width: 320px;         /* לא רחב מדי בדסקטופ */
+    width: 100%;
+    max-width: 220px;
     padding: 14px 0;
     font-size: 18px;
     font-weight: bold;
     border-radius: 12px;
-    text-align: center;
     text-decoration: none;
-    color: white;
+    color: #fff;
     display: block;
 }
 
-/* ===== מגיעים ===== */
-.btn.yes {
-    background-color: #0a5bd3;
-}
-
-/* ===== לא מגיעים ===== */
-.btn.no {
-    background-color: #ff9800;
-}
-/* ===== FORCE CONFIRM BUTTON LAYOUT ===== */
-
-.buttons {
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    gap: 14px;
-    margin-top: 20px;
-}
-
-.buttons .btn {
-    width: 220px;
-    padding: 14px 0;
-    font-size: 18px;
-    border-radius: 14px;
-    text-align: center;
-    text-decoration: none;
-}
-
 /* מגיעים */
-.buttons .yes {
-    background-color: #0b5ed7;
-    color: white;
+.btn.yes {
+    background-color: #0b5fa5;
 }
 
 /* לא מגיעים */
-.buttons .no {
-    background-color: #f59e0b;
-    color: white;
+.btn.no {
+    background-color: #ff9800;
 }
