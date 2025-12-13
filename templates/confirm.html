@@ -1,37 +1,44 @@
-@app.route("/confirm")
-def confirm():
+<!DOCTYPE html>
+<html lang="he">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>אישור הגעה</title>
+    <link rel="stylesheet" href="/static/style.css">
+</head>
 
-    # קבלת מזהים מהקישור
-    event_id = request.args.get("event_id")
-    family_id = request.args.get("family_id")
+<body>
 
-    # אם לא הגיעו מזהים – שגיאה ברורה
-    if not event_id or not family_id:
-        return "חסר event_id או family_id בקישור", 400
+<div class="container">
 
-    # שליפה מהזברה
-    event = get_event_data(event_id)
+    <!-- לוגו -->
+    <img class="logo" src="https://www.or4family.org.il/wp-content/uploads/2025/11/logo-1.png" alt="לוגו אור למשפחות">
 
-    # ניסיון לאתר משפחה מתוך ASKEV
-    fam = next((f for f in event["families"] if f["id"] == family_id), None)
+    <h1>אישור הגעה</h1>
 
-    if fam is None:
-        return f"לא נמצאה משפחה {family_id} באירוע {event_id}", 404
+    <p class="family-name">
+        משפחת <strong>{{ family_name }}</strong> היקרה,
+    </p>
 
-    # נתונים אמיתיים מהזברה
-    family_name = fam["family_name"]
-    tickets = int(fam["tickets_approved"]) if fam["tickets_approved"] else 0
-    event_name = event["event_name"]
-    event_date = event["event_date"]
-    event_time = event["event_time"]
-    location = event["event_location"]
+    <p>
+        אושרו לכם <strong>{{ tickets }}</strong> כרטיסים לאירוע
+        <strong>{{ event_name }}</strong>
+    </p>
 
-    return render_template(
-        "confirm.html",
-        family_name=family_name,
-        tickets=tickets,
-        event_name=event_name,
-        event_date=event_date,
-        event_time=event_time,
-        location=location
-    )
+    <p>
+        בתאריך <strong>{{ event_date }}</strong>
+        בשעה <strong>{{ event_time }}</strong><br>
+        במקום <strong>{{ location }}</strong>
+    </p>
+
+    <p>האם מגיעים?</p>
+
+    <div class="buttons">
+        <a class="btn yes" href="/thanks?status=yes&qty={{ tickets }}">מגיעים</a>
+        <a class="btn no" href="/thanks?status=no">לא מגיעים</a>
+    </div>
+
+</div>
+
+</body>
+</html>
