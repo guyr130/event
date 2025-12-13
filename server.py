@@ -49,18 +49,17 @@ def get_event_data(event_id):
     if card is None:
         return None
 
-    # ---- אירוע ----
+    # ---- event data ----
     ev_name = card.findtext(".//EV_N", default="")
     ev_date_raw = card.findtext(".//EV_D", default="")
     ev_hour = card.findtext(".//EVE_HOUR", default="")
     ev_loc = card.findtext(".//EVE_LOC", default="")
 
-    # ---- המרת תאריך לפורמט יפה ----
-    # מגיע כ- DD/MM/YYYY
+    # ---- format date ----
     try:
         dt = datetime.strptime(ev_date_raw, "%d/%m/%Y")
-        weekday_name = dt.strftime("%A")  # Sunday, Monday...
-        weekdays_he = {
+        weekday_eng = dt.strftime("%A")
+        weekdays = {
             "Sunday": "יום א'",
             "Monday": "יום ב'",
             "Tuesday": "יום ג'",
@@ -69,34 +68,35 @@ def get_event_data(event_id):
             "Friday": "יום ו'",
             "Saturday": "יום ש'"
         }
-        weekday_he = weekdays_he.get(weekday_name, "")
-        date_formatted = dt.strftime("%d.%m")  # 21.12
+        weekday = weekdays.get(weekday_eng, "")
+        date_fmt = dt.strftime("%d.%m")
     except:
-        weekday_he = ""
-        date_formatted = ev_date_raw
+        weekday = ""
+        date_fmt = ev_date_raw
 
-    # ---- משפחות ----
+    # ---- families ----
     families = []
-    for con in card.findall(".//CARD_CONNECTION_*/"):
-        pass  # לא בשימוש – רק לוודא שאין זבל
+    con_root = card.find("CONNECTIONS_CARDS")
 
-    for c in card.find("CONNECTIONS_CARDS"):
-        fam_id = c.findtext("ID")
-        name = c.findtext(".//CO_NAME", default="")
-        tickets = c.findtext(".//TOT_FFAM", default="0")
-        prov = c.findtext(".//PROV", default="0")
-        families.append({
-            "id": fam_id,
-            "name": name,
-            "tickets": int(tickets),
-            "approved": prov == "1"
-        })
+    if con_root is not None:
+        for connection in con_root:
+            fam_id = connection.findtext("ID")
+            fam_name = connection.findtext(".//CO_NAME", default="")
+            tickets = connection.findtext(".//TOT_FFAM", default="0")
+            prov = connection.findtext(".//PROV", default="0")
+
+            families.append({
+                "id": fam_id,
+                "name": fam_name,
+                "tickets": int(tickets),
+                "approved": prov == "1"
+            })
 
     return {
         "name": ev_name,
-        "date": date_formatted,
-        "weekday": weekday_he,
-        "time": ev_hour,     # כאן כבר נשמר כמו שצריך "12:00"
+        "date": date_fmt,
+        "weekday": weekday,
+        "time": ev_hour,
         "location": ev_loc,
         "families": families
     }
@@ -119,7 +119,6 @@ def confirm():
     if not data:
         return f"שגיאה בטעינת האירוע {event_id}"
 
-    # מציאת המשפחה
     fam = next((f for f in data["families"]
                 if f["id"] == family_id and f["approved"]), None)
 
@@ -131,7 +130,7 @@ def confirm():
         family_name=fam["name"],
         tickets=fam["tickets"],
         event_name=data["name"],
-        event_date=data["weekday"] + " · " + data["date"] + " · " + data["time"],
+        event_date=f"{data['weekday']} · {data['date']} · {data['time']}",
         event_time=data["time"],
         location=data["location"]
     )
@@ -143,7 +142,7 @@ def thanks():
     qty = request.args.get("q")
 
     if status == "yes":
-        message = f"אישורכם נקלט"
+        message = "אישורכם נקלט"
         sub = f"כמות שאושרה: {qty}"
     else:
         message = "העדכון נקלט"
