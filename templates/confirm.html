@@ -18,7 +18,7 @@ def confirm():
     if fam is None:
         return f"לא נמצאה משפחה {family_id} באירוע {event_id}", 404
 
-    # נתונים אמיתיים מתוך הזברה
+    # נתונים אמיתיים מהזברה
     family_name = fam["family_name"]
     tickets = int(fam["tickets_approved"]) if fam["tickets_approved"] else 0
     event_name = event["event_name"]
