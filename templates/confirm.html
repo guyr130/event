@@ -16,10 +16,12 @@
 
     <h1>אישור הגעה</h1>
 
+    <!-- שם המשפחה -->
     <p class="family-name">
         משפחת <strong>{{ family_name }}</strong> היקרה,
     </p>
 
+    <!-- טקסט כללי -->
     <p>
         אושרו לכם <strong>{{ tickets }}</strong> כרטיסים לאירוע
         <strong>{{ event_name }}</strong>
@@ -31,14 +33,32 @@
         במקום <strong>{{ location }}</strong>
     </p>
 
+    <p>אנא בחרו כמות כרטיסים:</p>
+
+    <!-- תיבת בחירה 1 עד MAX -->
+    <select id="qty" class="quantity-select">
+        {% for i in range(1, tickets + 1) %}
+            <option value="{{ i }}">{{ i }}</option>
+        {% endfor %}
+    </select>
+
     <p>האם מגיעים?</p>
 
+    <!-- כפתורים -->
     <div class="buttons">
-        <a class="btn yes" href="/thanks?status=yes&qty={{ tickets }}">מגיעים</a>
+        <a class="btn yes" onclick="submit_yes()">מגיעים</a>
         <a class="btn no" href="/thanks?status=no">לא מגיעים</a>
     </div>
 
 </div>
+
+<!-- סקריפט לשליחה -->
+<script>
+function submit_yes() {
+    let qty = document.getElementById("qty").value;
+    window.location.href = `/thanks?status=yes&qty=${qty}`;
+}
+</script>
 
 </body>
 </html>
