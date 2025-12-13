@@ -1,0 +1,16 @@
+<html dir="rtl">
+<head><meta name="viewport" content="width=device-width, initial-scale=1">
+<link rel="stylesheet" href="/static/style.css"></head>
+<body>
+<img src="https://www.or4family.org.il/wp-content/uploads/2025/11/logo-1.png" class="logo">
+<h1>אישור הגעה</h1>
+<p>משפחת <b>{{ family_name }}</b> היקרה,<br><br>
+אושרו לכם <b>{{ tickets }}</b> כרטיסים<br>
+לאירוע <b>{{ event_name }}</b><br>
+בתאריך <b>{{ date }}</b> בשעה <b>{{ time }}</b><br>
+במקום <b>{{ location }}</b></p>
+<a href="/update?family={{ family_id }}&event={{ event_id }}&status=1">
+<button class="btn-blue">מגיעים 💙</button></a>
+<a href="/update?family={{ family_id }}&event={{ event_id }}&status=0">
+<button class="btn-orange">לא מגיעים 🧡</button></a>
+</body></html>

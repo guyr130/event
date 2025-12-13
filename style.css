@@ -1,0 +1,5 @@
+body{text-align:center;font-family:Arial;padding:20px;}
+.logo{width:180px;margin-bottom:10px;}
+button{width:90%;padding:18px;font-size:22px;margin:10px 0;border-radius:14px;border:none;cursor:pointer;}
+.btn-blue{background:#005CA8;color:white;}
+.btn-orange{background:#FF8A00;color:white;}
