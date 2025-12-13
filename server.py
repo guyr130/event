@@ -9,10 +9,6 @@ ZEBRA_URL = "https://25098.zebracrm.com/ext_interface.php?b=get_multi_cards_deta
 USERNAME = "IVAPP"
 PASSWORD = "1q2w3e4r"
 
-
-# ========================================================
-#   שליפה מה־API של זברה: אירוע + משפחות
-# ========================================================
 def get_event_data(event_id):
     xml_body = f"""
 <ROOT>
@@ -33,10 +29,12 @@ def get_event_data(event_id):
     <CONNECTION_CARDS>
         <CONNECTION_CARD>
             <CONNECTION_KEY>ASKEV</CONNECTION_KEY>
+
             <FIELDS>
                 <ID></ID>
                 <CO_NAME></CO_NAME>
             </FIELDS>
+
             <CON_FIELDS>
                 <TOT_FFAM></TOT_FFAM>
                 <PROV></PROV>
@@ -46,7 +44,6 @@ def get_event_data(event_id):
 </ROOT>
 """
 
-    # שליחת POST לזברה
     response = requests.post(
         ZEBRA_URL,
         data=xml_body.encode("utf-8"),
@@ -58,48 +55,32 @@ def get_event_data(event_id):
     print(raw)
     print("===== END RESPONSE =====")
 
-    # אם לא חזר XML תקין
     if not raw.startswith("<"):
-        return {"error": f"Invalid XML response: {raw}"}
+        return {"error": raw}
 
     tree = ET.fromstring(raw)
 
-    # שדות אירוע
-    ev_name = tree.findtext(".//EV_N", "")
-    ev_date = tree.findtext(".//EV_D", "")
-    ev_time = tree.findtext(".//EVE_HOUR", "")
-    ev_loc = tree.findtext(".//EVE_LOC", "")
+    event = {
+        "event_name": tree.findtext(".//EV_N", ""),
+        "event_date": tree.findtext(".//EV_D", ""),
+        "event_time": tree.findtext(".//EVE_HOUR", ""),
+        "event_location": tree.findtext(".//EVE_LOC", "")
+    }
 
-    # ----------------------------------------------------
-    # משפחות – תגיות דינמיות CARD_CONNECTION_XXXXX
-    # ----------------------------------------------------
     families = []
     for node in tree.findall(".//*"):
         if node.tag.startswith("CARD_CONNECTION_"):
-            fam_id = node.findtext("ID", "")
-            name = node.findtext("FIELDS/CO_NAME", "")
-            tickets = node.findtext("CON_FIELDS/TOT_FFAM", "0")
-            approved = node.findtext("CON_FIELDS/PROV", "0")
-
             families.append({
-                "id": fam_id,
-                "name": name,
-                "tickets": int(tickets),
-                "approved": approved
+                "id": node.findtext("ID", ""),
+                "name": node.findtext("FIELDS/CO_NAME", ""),
+                "tickets": int(node.findtext("CON_FIELDS/TOT_FFAM", "0")),
+                "approved": node.findtext("CON_FIELDS/PROV", "0")
             })
 
-    return {
-        "event_name": ev_name,
-        "event_date": ev_date,
-        "event_time": ev_time,
-        "event_location": ev_loc,
-        "families": families
-    }
+    event["families"] = families
+    return event
 
 
-# ========================================================
-#   עמוד אישור הגעה
-# ========================================================
 @app.route("/confirm")
 def confirm():
     event_id = request.args.get("event_id")
@@ -109,12 +90,10 @@ def confirm():
         return "חסר event_id או family_id", 400
 
     data = get_event_data(event_id)
-
     if "error" in data:
-        return f"שגיאה בשליפת נתונים מזברה: {data['error']}", 500
+        return f"שגיאה בשליפת נתונים: {data['error']}", 500
 
     fam = next((f for f in data["families"] if f["id"] == family_id), None)
-
     if fam is None:
         return f"לא נמצאה משפחה {family_id} באירוע {event_id}"
 
