@@ -49,11 +49,11 @@ def get_event_data(event_id):
     if card is None:
         return None
 
-    # ---- event data ----
-    ev_name = card.findtext(".//EV_N", default="")
-    ev_date_raw = card.findtext(".//EV_D", default="")
-    ev_hour = card.findtext(".//EVE_HOUR", default="")
-    ev_loc = card.findtext(".//EVE_LOC", default="")
+    # ---- event fields ----
+    ev_name = card.findtext(".//EV_N", "")
+    ev_date_raw = card.findtext(".//EV_D", "")
+    ev_hour = card.findtext(".//EVE_HOUR", "")
+    ev_loc = card.findtext(".//EVE_LOC", "")
 
     # ---- format date ----
     try:
@@ -79,17 +79,17 @@ def get_event_data(event_id):
     con_root = card.find("CONNECTIONS_CARDS")
 
     if con_root is not None:
-        for connection in con_root:
-            fam_id = connection.findtext("ID")
-            fam_name = connection.findtext(".//CO_NAME", default="")
-            tickets = connection.findtext(".//TOT_FFAM", default="0")
-            prov = connection.findtext(".//PROV", default="0")
+        for child in list(con_root):
+            fam_id = child.findtext("ID")
+            fam_name = child.findtext(".//CO_NAME", "")
+            tickets = child.findtext(".//TOT_FFAM", "0")
+            prov = child.findtext(".//PROV", "0")
 
             families.append({
                 "id": fam_id,
                 "name": fam_name,
                 "tickets": int(tickets),
-                "approved": prov == "1"
+                "approved": (prov == "1")
             })
 
     return {
@@ -131,7 +131,6 @@ def confirm():
         tickets=fam["tickets"],
         event_name=data["name"],
         event_date=f"{data['weekday']} · {data['date']} · {data['time']}",
-        event_time=data["time"],
         location=data["location"]
     )
 
