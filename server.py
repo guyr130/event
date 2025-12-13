@@ -4,14 +4,13 @@ import xml.etree.ElementTree as ET
 
 app = Flask(__name__)
 
-# === כתובת API הנכונה של זברה כולל הפעולה b ===
+# === Zebra API ===
 ZEBRA_URL = "https://25098.zebracrm.com/ext_interface.php?b=get_multi_cards_details"
 ZEBRA_USER = "IVAPP"
 ZEBRA_PASS = "1q2w3e4r"
 
 
 def get_event_data(event_id):
-    # === הגוף של ה-XML שאנו שולחים לזברה ===
     xml_body = f"""
 <ROOT>
     <PERMISSION>
@@ -47,29 +46,22 @@ def get_event_data(event_id):
 """.strip()
 
     headers = {"Content-Type": "application/xml"}
-
-    # === שליחת הבקשה ל-Zebra ===
     response = requests.post(ZEBRA_URL, data=xml_body.encode("utf-8"), headers=headers)
 
-    # === הדפסת ה-XML האמיתי שמגיע מהשרת כדי שנראה מה קורה ===
+    # לוג — לראות מה זברה מחזירה
     print("\n===== RAW XML FROM ZEBRA =====")
     print(response.text)
     print("===== END RAW XML =====\n")
 
     raw = response.text.strip()
-
-    # === אם אין נתונים או שהפעולה לא קיימת ===
     if raw == "" or "function not found" in raw.lower():
         return None
 
     tree = ET.fromstring(raw)
-
-    # איתור הכרטיס עם נתוני האירוע
     card = tree.find(".//CARD")
     if card is None:
         return None
 
-    # === שליפת נתוני האירוע ===
     event_data = {
         "event_name": card.findtext(".//EV_N", default=""),
         "event_date": card.findtext(".//EV_D", default=""),
@@ -78,19 +70,20 @@ def get_event_data(event_id):
         "families": []
     }
 
-    # === שליפת כל המשפחות (Connections) ===
-    for f in card.findall(".//CARD_CONNECTION_*"):
-        fam_id = f.findtext("ID")
-        name = f.findtext(".//CO_NAME")
-        tickets = f.findtext(".//TOT_FFAM")
-        approved = f.findtext(".//PROV")
+    # === שליפת המשפחות ===
+    for element in card:
+        if element.tag.startswith("CARD_CONNECTION_"):
+            fam_id = element.findtext("ID")
+            name = element.findtext(".//CO_NAME")
+            tickets = element.findtext(".//TOT_FFAM")
+            approved = element.findtext(".//PROV")
 
-        event_data["families"].append({
-            "id": fam_id,
-            "family_name": name,
-            "tickets_approved": tickets,
-            "approved": approved
-        })
+            event_data["families"].append({
+                "id": fam_id,
+                "family_name": name,
+                "tickets_approved": tickets,
+                "approved": approved
+            })
 
     return event_data
 
