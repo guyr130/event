@@ -48,7 +48,7 @@ def get_event_data(event_id):
     headers = {"Content-Type": "application/xml"}
     response = requests.post(ZEBRA_URL, data=xml_body.encode("utf-8"), headers=headers)
 
-    # לוג — לראות מה זברה מחזירה
+    # לוג למעקב
     print("\n===== RAW XML FROM ZEBRA =====")
     print(response.text)
     print("===== END RAW XML =====\n")
@@ -62,6 +62,7 @@ def get_event_data(event_id):
     if card is None:
         return None
 
+    # נתוני האירוע
     event_data = {
         "event_name": card.findtext(".//EV_N", default=""),
         "event_date": card.findtext(".//EV_D", default=""),
@@ -70,20 +71,22 @@ def get_event_data(event_id):
         "families": []
     }
 
-    # === שליפת המשפחות ===
-    for element in card:
-        if element.tag.startswith("CARD_CONNECTION_"):
-            fam_id = element.findtext("ID")
-            name = element.findtext(".//CO_NAME")
-            tickets = element.findtext(".//TOT_FFAM")
-            approved = element.findtext(".//PROV")
+    # === שליפת המשפחות מתוך CONNECTIONS_CARDS ===
+    connections = card.find("CONNECTIONS_CARDS")
+    if connections is not None:
+        for element in connections:
+            if element.tag.startswith("CARD_CONNECTION_"):
+                fam_id = element.findtext("ID")
+                name = element.findtext(".//CO_NAME")
+                tickets = element.findtext(".//TOT_FFAM")
+                approved = element.findtext(".//PROV")
 
-            event_data["families"].append({
-                "id": fam_id,
-                "family_name": name,
-                "tickets_approved": tickets,
-                "approved": approved
-            })
+                event_data["families"].append({
+                    "id": fam_id,
+                    "family_name": name,
+                    "tickets_approved": tickets,
+                    "approved": approved
+                })
 
     return event_data
 
