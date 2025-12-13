@@ -16,29 +16,43 @@
 
     <h1>אישור הגעה</h1>
 
-    <p class="family-name">
-        משפחת <strong>{{ family_name }}</strong> היקרה,
+    <p class="family-line">משפחת <strong>{{ family_name }}</strong> היקרה,</p>
+
+    <p class="event-line">
+        אושרו לכם <strong>{{ tickets }}</strong> כרטיסים לאירוע:
+        <strong>{{ event_name }}</strong><br>
+        בתאריך <strong>{{ event_date }}</strong> בשעה <strong>{{ event_time }}</strong><br>
+        ב<strong>{{ location }}</strong>
     </p>
 
-    <p>
-        אושרו לכם <strong>{{ tickets }}</strong> כרטיסים לאירוע
-        <strong>{{ event_name }}</strong>
-    </p>
+    <!-- בחירת כמות -->
+    <label for="qty">בחרו כמות:</label>
+    <select id="qty">
+        <option value="" disabled selected>אנא בחרו כמות</option>
+        {% for i in range(1, tickets + 1) %}
+            <option value="{{ i }}">{{ i }}</option>
+        {% endfor %}
+    </select>
 
-    <p>
-        בתאריך <strong>{{ event_date }}</strong>
-        בשעה <strong>{{ event_time }}</strong><br>
-        במקום <strong>{{ location }}</strong>
-    </p>
-
-    <p>האם מגיעים?</p>
-
-    <div class="buttons">
-        <a class="btn yes" href="/thanks?status=yes&qty={{ tickets }}">מגיעים</a>
-        <a class="btn no" href="/thanks?status=no">לא מגיעים</a>
+    <!-- כפתורים -->
+    <div class="btn-box">
+        <button class="yes-btn" onclick="submitForm('yes')">מגיעים 💙</button>
+        <button class="no-btn" onclick="submitForm('no')">לא מגיעים 🧡</button>
     </div>
 
 </div>
+
+<script>
+function submitForm(status) {
+    const qty = document.getElementById("qty").value;
+    if (!qty && status === "yes") {
+        alert("נא לבחור כמות כרטיסים");
+        return;
+    }
+
+    window.location.href = `/thanks?status=${status}&qty=${qty}`;
+}
+</script>
 
 </body>
 </html>
