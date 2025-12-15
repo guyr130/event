@@ -10,6 +10,9 @@ ZEBRA_URL = "https://25098.zebracrm.com/ext_interface.php?b=get_multi_cards_deta
 ZEBRA_USER = "IVAPP"
 ZEBRA_PASS = "1q2w3e4r"
 
+# === Google Sheets Web App ===
+GOOGLE_SHEETS_WEBAPP_URL = "https://script.google.com/macros/s/AKfycbyK2wobbQUnN8hQ2HwL9sauJ4Nv8N3JpsRCdGGlrAY4KmEPnq2CUZFBaC_GZXJ7I3HT/exec"
+
 
 def get_event_data(event_id):
     xml_body = f"""
@@ -124,30 +127,43 @@ def confirm():
 
 
 # =========================
-# איסוף נתונים (שלב ראשון)
+# איסוף נתונים → Google Sheets
 # =========================
 @app.route("/submit", methods=["POST"])
 def submit():
-    data = request.json
+    data = request.json or {}
 
-    log_entry = {
+    payload = {
         "timestamp": datetime.now().isoformat(),
         "event_id": data.get("event_id"),
         "family_id": data.get("family_id"),
-        "status": data.get("status"),   # yes / no
-        "tickets": data.get("tickets")
+        "status": data.get("status"),
+        "tickets": data.get("tickets"),
+        "user_agent": request.headers.get("User-Agent", ""),
+        "ip": request.headers.get("X-Forwarded-For", request.remote_addr),
     }
 
-    print("\n===== RSVP RECEIVED =====")
-    for k, v in log_entry.items():
-        print(f"{k}: {v}")
-    print("=========================\n")
+    try:
+        r = requests.post(
+            GOOGLE_SHEETS_WEBAPP_URL,
+            json=payload,
+            timeout=10
+        )
 
-    return jsonify({"success": True})
+        print("===== SENT TO GOOGLE SHEETS =====")
+        print(payload)
+        print("Sheets response:", r.status_code, r.text[:200])
+        print("================================\n")
+
+        return jsonify({"success": True})
+
+    except Exception as e:
+        print("ERROR sending to Google Sheets:", str(e))
+        return jsonify({"success": False, "error": str(e)}), 500
 
 
 # =========================
-# עמוד תודה (אם תשתמש)
+# עמוד תודה
 # =========================
 @app.route("/thanks")
 def thanks():
