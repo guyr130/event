@@ -1,6 +1,7 @@
-from flask import Flask, request, render_template
+from flask import Flask, request, render_template, jsonify
 import requests
 import xml.etree.ElementTree as ET
+from datetime import datetime
 
 app = Flask(__name__)
 
@@ -46,9 +47,12 @@ def get_event_data(event_id):
 """.strip()
 
     headers = {"Content-Type": "application/xml"}
-    response = requests.post(ZEBRA_URL, data=xml_body.encode("utf-8"), headers=headers)
+    response = requests.post(
+        ZEBRA_URL,
+        data=xml_body.encode("utf-8"),
+        headers=headers
+    )
 
-    # לוג למעקב
     print("\n===== RAW XML FROM ZEBRA =====")
     print(response.text)
     print("===== END RAW XML =====\n")
@@ -62,7 +66,6 @@ def get_event_data(event_id):
     if card is None:
         return None
 
-    # נתוני האירוע
     event_data = {
         "event_name": card.findtext(".//EV_N", default=""),
         "event_date": card.findtext(".//EV_D", default=""),
@@ -71,7 +74,6 @@ def get_event_data(event_id):
         "families": []
     }
 
-    # === שליפת המשפחות מתוך CONNECTIONS_CARDS ===
     connections = card.find("CONNECTIONS_CARDS")
     if connections is not None:
         for element in connections:
@@ -91,6 +93,9 @@ def get_event_data(event_id):
     return event_data
 
 
+# =========================
+# דף אישור הגעה
+# =========================
 @app.route("/confirm")
 def confirm():
     event_id = request.args.get("event_id")
@@ -118,10 +123,36 @@ def confirm():
     )
 
 
+# =========================
+# איסוף נתונים (שלב ראשון)
+# =========================
+@app.route("/submit", methods=["POST"])
+def submit():
+    data = request.json
+
+    log_entry = {
+        "timestamp": datetime.now().isoformat(),
+        "event_id": data.get("event_id"),
+        "family_id": data.get("family_id"),
+        "status": data.get("status"),   # yes / no
+        "tickets": data.get("tickets")
+    }
+
+    print("\n===== RSVP RECEIVED =====")
+    for k, v in log_entry.items():
+        print(f"{k}: {v}")
+    print("=========================\n")
+
+    return jsonify({"success": True})
+
+
+# =========================
+# עמוד תודה (אם תשתמש)
+# =========================
 @app.route("/thanks")
 def thanks():
-    status = request.args.get("status")  # yes / no
-    qty = request.args.get("qty")         # כמות שנבחרה
+    status = request.args.get("status")
+    qty = request.args.get("qty")
 
     return render_template(
         "thanks.html",
@@ -130,7 +161,9 @@ def thanks():
     )
 
 
-
+# =========================
+# Health check
+# =========================
 @app.route("/")
 def home():
     return "OK – server is running!"
