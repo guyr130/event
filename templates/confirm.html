@@ -24,25 +24,21 @@
         style="display:block; width:100%; max-width:260px; margin:0 auto 24px auto;"
     >
 
-    <!-- כותרת -->
     <h1 style="color:#0b5fa5;">אישור הגעה</h1>
 
-    <!-- שם משפחה -->
     <p style="font-size:18px;">
         משפחת <strong>{{ family_name }}</strong> היקרה,
     </p>
 
-    <!-- פרטי האירוע -->
     <p style="font-size:17px; line-height:1.6;">
         אושרו לכם <strong>{{ tickets }}</strong> כרטיסים לאירוע<br>
         <strong>{{ event_name }}</strong><br>
         בתאריך {{ event_date }}<br>
-        בשעה <strong>{{ event_time }}</strong><br>
+        בשעה <strong>16:00</strong><br>
         במקום {{ location }}
     </p>
 
-    <!-- בחירת כמות -->
-    <p style="margin-top:20px;">בחרו כמות משתתפים:</p>
+    <p style="margin-top:20px;">בחרו כמות:</p>
 
     <select id="qty" style="
         padding:10px;
@@ -57,7 +53,6 @@
         {% endfor %}
     </select>
 
-    <!-- כפתורים -->
     <div>
         <button onclick="sendResponse('yes')" style="
             width:220px;
@@ -95,13 +90,11 @@ function sendResponse(status) {
     const qtySelect = document.getElementById("qty");
     let qty = qtySelect.value;
 
-    // אם מגיעים – חובה לבחור כמות
     if (status === "yes" && !qty) {
-        alert("אנא בחרו כמות משתתפים");
+        alert("אנא בחרו כמות כרטיסים");
         return;
     }
 
-    // אם לא מגיעים – כמות 0
     if (status === "no") {
         qty = 0;
     }
@@ -111,8 +104,7 @@ function sendResponse(status) {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
             event_id: "{{ event_id }}",
-            family_id: "{{ zebra_family_id }}",
-            connection_id: "{{ connection_id }}",   // ⭐ ASKEV ID
+            family_id: "{{ family_id }}",
             status: status,
             tickets: qty
         })
