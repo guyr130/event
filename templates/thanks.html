@@ -2,8 +2,8 @@
 <html lang="he">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>תודה</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
 </head>
 
 <body style="
@@ -15,38 +15,21 @@
     background: #ffffff;
 ">
 
-<div style="max-width:420px; margin:0 auto; padding:24px;">
+<div style="max-width:420px; margin:0 auto; padding:20px;">
 
     <img
         src="https://www.or4family.org.il/wp-content/uploads/2025/11/logo-1.png"
-        alt="לוגו אור למשפחות"
-        style="display:block; max-width:260px; width:100%; margin:0 auto 30px auto;"
+        style="width:200px; margin-bottom:20px;"
     >
 
     {% if status == "yes" %}
-
-        <h2 style="color:#0b5fa5;">
-            אישורכם נקלט בהצלחה
-        </h2>
-
-        <p style="font-size:18px; color:#0b5fa5;">
-            כמות מאושרת: <strong>{{ qty }}</strong> כרטיסים
-        </p>
-
-        <p style="font-size:18px; color:#0b5fa5;">
-            מחכים לכם באירוע 💙
-        </p>
-
+        <h2 style="color:#0b5fa5;">אישורכם נקלט 💙</h2>
+        <p>נרשמה הגעה עבור <strong>{{ qty }}</strong> משתתפים</p>
+        <p>נתראה באירוע</p>
     {% else %}
-
-        <h2 style="color:#ff9800;">
-            העדכון נקלט בהצלחה
-        </h2>
-
-        <p style="font-size:18px;">
-            נתראה באירועים אחרים 🧡
-        </p>
-
+        <h2 style="color:#f28c28;">העדכון נקלט</h2>
+        <p>מצטערים שלא תגיעו</p>
+        <p>נתראה באירועים אחרים</p>
     {% endif %}
 
 </div>
