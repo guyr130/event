@@ -22,7 +22,6 @@ GOOGLE_SHEETS_WEBAPP_URL = (
     "AKfycbyK2wobbQUnN8hQ2HwL9sauJ4Nv8N3JpsRCdGGlrAY4KmEPnq2CUZFBaC_GZXJ7I3HT/exec"
 )
 
-
 # =====================================================
 # Fetch event + families from Zebra
 # =====================================================
@@ -92,9 +91,8 @@ def get_event_data(event_id):
 
     return event_data
 
-
 # =====================================================
-# Update attendance in Zebra
+# Update attendance in Zebra  ✅ FIXED
 # =====================================================
 def update_zebra_attendance(family_id, event_id, status, qty):
     status_text = "אישרו" if status == "yes" else "ביטלו"
@@ -107,7 +105,8 @@ def update_zebra_attendance(family_id, event_id, status, qty):
         <PASSWORD>{ZEBRA_PASS}</PASSWORD>
     </PERMISSION>
 
-    <CARD_TYPE>business_customer</CARD_TYPE>
+    <!-- חובה: FILTER ולא CARD_TYPE -->
+    <CARD_TYPE_FILTER>business_customer</CARD_TYPE_FILTER>
 
     <IDENTIFIER>
         <ID>{family_id}</ID>
@@ -147,7 +146,6 @@ def update_zebra_attendance(family_id, event_id, status, qty):
 
     return r.text
 
-
 # =====================================================
 # Confirm page
 # =====================================================
@@ -179,7 +177,6 @@ def confirm():
         event_id=event_id
     )
 
-
 # =====================================================
 # Submit RSVP
 # =====================================================
@@ -192,7 +189,7 @@ def submit():
     status = data.get("status")
     qty = int(data.get("tickets", 0))
 
-    # --- send to Google Sheets ---
+    # ---- Google Sheets ----
     sheets_payload = {
         "timestamp": datetime.now().isoformat(),
         "event_id": event_id,
@@ -211,11 +208,10 @@ def submit():
     except Exception as e:
         print("ERROR sending to Google Sheets:", e)
 
-    # --- update Zebra ---
+    # ---- Zebra update ----
     update_zebra_attendance(family_id, event_id, status, qty)
 
     return jsonify({"success": True})
-
 
 # =====================================================
 # Thank you page
@@ -228,14 +224,12 @@ def thanks():
         qty=request.args.get("qty")
     )
 
-
 # =====================================================
 # Health check
 # =====================================================
 @app.route("/")
 def home():
     return "OK – server is running!"
-
 
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=10000)
