@@ -1,70 +1,145 @@
-from flask import Flask, request, render_template, redirect
+from flask import Flask, request, render_template, jsonify, redirect, url_for
 import requests
 import datetime
-from zebra_api import update_askev_attendance
 
 app = Flask(__name__)
 
-GOOGLE_SHEET_WEBHOOK = "https://script.google.com/macros/s/XXXX/exec"
+# =========================
+# CONFIG
+# =========================
+GOOGLE_SHEET_WEBHOOK = "PASTE_HERE_FULL_HTTPS_WEBHOOK_URL"
 
+ZEBRA_URL = "https://25098.zebracrm.com/ext_interface.php?b=update_customer"
+ZEBRA_USER = "IVAPP"
+ZEBRA_PASS = "1q2w3e4r"
+
+FIXED_DATE = "17/12/2025"
+
+# =========================
+# CONFIRM PAGE
+# =========================
 @app.route("/confirm")
 def confirm():
+    event_id = request.args.get("event_id")
+    family_id = request.args.get("family_id")
+
+    if not event_id or not family_id:
+        return "Missing parameters", 400
+
     return render_template(
         "confirm.html",
-        event_id=request.args.get("event_id"),
-        zebra_family_id=request.args.get("family_id"),
-        family_name="משפחת ביטון",
+        event_id=event_id,
+        zebra_family_id=family_id,
+        family_name="משפחה לדוגמה",
         tickets=2,
         event_name="אירוע בדיקה",
         event_date="17/12/2025",
         location="ירושלים"
     )
 
+# =========================
+# SUBMIT
+# =========================
 @app.route("/submit", methods=["POST"])
 def submit():
     data = request.get_json()
 
-    event_id = data["event_id"]
-    family_id = data["family_id"]
-    status = data["status"]
+    event_id = data.get("event_id")
+    family_id = data.get("family_id")
+    status = data.get("status")          # yes / no
     tickets = int(data.get("tickets", 0))
 
-    payload = {
-        "timestamp": datetime.datetime.now().isoformat(),
-        "event_id": event_id,
-        "family_id": family_id,
-        "status": status,
-        "tickets": tickets
-    }
-
-    # Google Sheets
+    # -------------------------
+    # SEND TO GOOGLE SHEETS
+    # -------------------------
     try:
-        r = requests.post(GOOGLE_SHEET_WEBHOOK, json=payload, timeout=5)
+        sheet_payload = {
+            "timestamp": datetime.datetime.now().isoformat(),
+            "event_id": event_id,
+            "family_id": family_id,
+            "status": status,
+            "tickets": tickets,
+            "user_agent": request.headers.get("User-Agent"),
+            "ip": request.remote_addr
+        }
+        r = requests.post(GOOGLE_SHEET_WEBHOOK, json=sheet_payload, timeout=5)
         print("Sheets:", r.status_code, r.text)
     except Exception as e:
         print("Sheets error:", e)
 
-    # Zebra
+    # -------------------------
+    # SEND TO ZEBRA (POSTMAN COPY)
+    # -------------------------
+    zebra_status = "אישרו" if status == "yes" else "ביטלו"
+    zebra_tickets = tickets if status == "yes" else 0
+
+    zebra_xml = f"""<?xml version="1.0" encoding="utf-8"?>
+<ROOT>
+    <PERMISSION>
+        <USERNAME>{ZEBRA_USER}</USERNAME>
+        <PASSWORD>{ZEBRA_PASS}</PASSWORD>
+    </PERMISSION>
+
+    <CARD_TYPE>business_customer</CARD_TYPE>
+
+    <IDENTIFIER>
+        <ID>{family_id}</ID>
+    </IDENTIFIER>
+
+    <CUST_DETAILS></CUST_DETAILS>
+
+    <CONNECTION_CARD_DETAILS>
+        <UPDATE_EVEN_CONNECTED>1</UPDATE_EVEN_CONNECTED>
+        <CONNECTION_KEY>ASKEV</CONNECTION_KEY>
+        <KEY>ID</KEY>
+        <VALUE>{event_id}</VALUE>
+
+        <FIELDS>
+            <A_C>{zebra_status}</A_C>
+            <A_D>{FIXED_DATE}</A_D>
+            <NO_ARIVE>{zebra_tickets}</NO_ARIVE>
+        </FIELDS>
+    </CONNECTION_CARD_DETAILS>
+</ROOT>
+"""
+
     try:
-        update_askev_attendance(
-            family_id=family_id,
-            event_id=event_id,
-            status=status,
-            tickets=tickets
+        print("===== ZEBRA REQUEST =====")
+        print(zebra_xml)
+
+        zr = requests.post(
+            ZEBRA_URL,
+            data=zebra_xml.encode("utf-8"),
+            headers={"Content-Type": "application/xml"},
+            timeout=10
         )
+
+        print("===== ZEBRA RESPONSE =====")
+        print(zr.text)
+
     except Exception as e:
         print("Zebra error:", e)
 
-    return redirect(f"/thanks?status={status}&qty={tickets}")
+    return redirect(url_for("thanks", status=status, qty=zebra_tickets))
 
+# =========================
+# THANK YOU PAGE
+# =========================
 @app.route("/thanks")
 def thanks():
-    return render_template(
-        "thanks.html",
-        status=request.args.get("status"),
-        qty=request.args.get("qty")
-    )
+    status = request.args.get("status")
+    qty = request.args.get("qty")
+    return render_template("thanks.html", status=status, qty=qty)
 
+# =========================
+# ROOT (health)
+# =========================
 @app.route("/")
 def root():
     return "OK"
+
+# =========================
+# RUN
+# =========================
+if __name__ == "__main__":
+    app.run(host="0.0.0.0", port=10000)
