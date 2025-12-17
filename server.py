@@ -5,24 +5,26 @@ from datetime import datetime
 
 app = Flask(__name__)
 
-# ===============================
+# =========================
 # Zebra API
-# ===============================
+# =========================
 ZEBRA_GET_URL = "https://25098.zebracrm.com/ext_interface.php?b=get_multi_cards_details"
 ZEBRA_UPDATE_URL = "https://25098.zebracrm.com/ext_interface.php?b=update_customer"
-
 ZEBRA_USER = "IVAPP"
 ZEBRA_PASS = "1q2w3e4r"
 
-# ===============================
-# Google Sheets WebApp
-# ===============================
-GOOGLE_SHEETS_WEBAPP_URL = "https://script.google.com/macros/s/AKfycbyK2wobbQUnN8hQ2HwL9sauJ4Nv8N3JpsRCdGGlrAY4KmEPnq2CUZFBaC_GZXJ7I3HT/exec"
+# =========================
+# Google Sheets Web App
+# =========================
+GOOGLE_SHEETS_WEBAPP_URL = (
+    "https://script.google.com/macros/s/"
+    "AKfycbyK2wobbQUnN8hQ2HwL9sauJ4Nv8N3JpsRCdGGlrAY4KmEPnq2CUZFBaC_GZXJ7I3HT"
+    "/exec"
+)
 
-
-# =====================================================
-# שליפת נתוני אירוע + משפחות מזברה
-# =====================================================
+# =========================
+# שליפת נתוני אירוע + משפחות
+# =========================
 def get_event_data(event_id):
     xml_body = f"""
 <ROOT>
@@ -58,43 +60,43 @@ def get_event_data(event_id):
 </ROOT>
 """.strip()
 
-    headers = {"Content-Type": "application/xml"}
-    r = requests.post(ZEBRA_GET_URL, data=xml_body.encode("utf-8"), headers=headers)
+    headers = {"Content-Type": "application/xml; charset=utf-8"}
+    response = requests.post(ZEBRA_GET_URL, data=xml_body.encode("utf-8"), headers=headers)
 
-    print("===== RAW XML FROM ZEBRA =====")
-    print(r.text)
-    print("===== END RAW XML =====")
+    print("\n===== RAW XML FROM ZEBRA =====")
+    print(response.text)
+    print("===== END RAW XML =====\n")
 
-    tree = ET.fromstring(r.text)
+    tree = ET.fromstring(response.text)
     card = tree.find(".//CARD")
     if card is None:
         return None
 
-    event = {
+    event_data = {
         "event_name": card.findtext(".//EV_N", ""),
         "event_date": card.findtext(".//EV_D", ""),
         "event_time": card.findtext(".//EVE_HOUR", ""),
-        "location": card.findtext(".//EVE_LOC", ""),
+        "event_location": card.findtext(".//EVE_LOC", ""),
         "families": []
     }
 
-    for conn in card.findall(".//CONNECTIONS_CARDS/*"):
-        fam_id = conn.findtext("ID")
-        name = conn.findtext(".//CO_NAME")
-        tickets = conn.findtext(".//TOT_FFAM", "0")
+    connections = card.find("CONNECTIONS_CARDS")
+    if connections is not None:
+        for el in connections:
+            if el.tag.startswith("CARD_CONNECTION_"):
+                event_data["families"].append({
+                    "id": el.findtext("ID"),
+                    "family_name": el.findtext(".//CO_NAME"),
+                    "tickets_approved": el.findtext(".//TOT_FFAM", "0"),
+                    "approved": el.findtext(".//PROV", "0")
+                })
 
-        event["families"].append({
-            "id": fam_id,
-            "family_name": name,
-            "tickets": int(tickets)
-        })
-
-    return event
+    return event_data
 
 
-# =====================================================
-# עדכון אישור הגעה בזברה – זה החלק הקריטי
-# =====================================================
+# =========================
+# עדכון זברה – זה החלק הקריטי
+# =========================
 def update_zebra_attendance(family_id, event_id, status, qty):
     status_text = "אישרו" if status == "yes" else "ביטלו"
     today = datetime.now().strftime("%d/%m/%Y")
@@ -106,8 +108,7 @@ def update_zebra_attendance(family_id, event_id, status, qty):
         <PASSWORD>{ZEBRA_PASS}</PASSWORD>
     </PERMISSION>
 
-    <!-- קריטי! -->
-    <CARD_TYPE_FILTER>business_customer</CARD_TYPE_FILTER>
+    <CARD_TYPE>business_customer</CARD_TYPE>
 
     <IDENTIFIER>
         <ID>{family_id}</ID>
@@ -130,7 +131,7 @@ def update_zebra_attendance(family_id, event_id, status, qty):
 </ROOT>
 """
 
-    print(">>> ABOUT TO UPDATE ZEBRA <<<")
+    print("\n>>> ABOUT TO UPDATE ZEBRA <<<")
     print(xml_body)
 
     headers = {"Content-Type": "application/xml; charset=utf-8"}
@@ -141,79 +142,90 @@ def update_zebra_attendance(family_id, event_id, status, qty):
         timeout=15
     )
 
-    print("[ZEBRA RESPONSE]")
+    print("[ZEBRA] RESPONSE:")
     print(r.text)
 
     return r.text
 
 
-# =====================================================
+# =========================
 # דף אישור הגעה
-# =====================================================
+# =========================
 @app.route("/confirm")
 def confirm():
     event_id = request.args.get("event_id")
     family_id = request.args.get("family_id")
 
+    if not event_id or not family_id:
+        return "Missing event_id or family_id", 400
+
     event = get_event_data(event_id)
     if not event:
-        return "שגיאה בשליפת האירוע", 500
+        return "Event not found", 404
 
     fam = next((f for f in event["families"] if f["id"] == family_id), None)
     if not fam:
-        return "משפחה לא נמצאה באירוע", 404
+        return "Family not found", 404
 
     return render_template(
         "confirm.html",
         family_name=fam["family_name"],
-        tickets=fam["tickets"],
+        tickets=int(fam["tickets_approved"]),
         event_name=event["event_name"],
         event_date=event["event_date"],
-        location=event["location"],
+        event_time=event["event_time"],
+        location=event["event_location"],
         event_id=event_id,
         zebra_family_id=family_id
     )
 
 
-# =====================================================
-# קבלת בחירת המשתמש
-# =====================================================
+# =========================
+# קבלת אישור → Sheets + Zebra
+# =========================
 @app.route("/submit", methods=["POST"])
 def submit():
-    data = request.json
+    data = request.json or {}
 
     event_id = data.get("event_id")
     family_id = data.get("family_id")
     status = data.get("status")
-    qty = int(data.get("tickets", 0))
+    tickets = int(data.get("tickets", 0))
 
     payload = {
         "timestamp": datetime.now().isoformat(),
         "event_id": event_id,
         "family_id": family_id,
         "status": status,
-        "tickets": qty,
+        "tickets": tickets,
         "user_agent": request.headers.get("User-Agent", ""),
         "ip": request.headers.get("X-Forwarded-For", request.remote_addr),
     }
 
-    # Google Sheets
-    requests.post(GOOGLE_SHEETS_WEBAPP_URL, json=payload, timeout=10)
+    # --- Sheets ---
+    try:
+        r = requests.post(GOOGLE_SHEETS_WEBAPP_URL, json=payload, timeout=10)
+        print("===== SENT TO GOOGLE SHEETS =====")
+        print(payload)
+        print("Sheets response:", r.status_code, r.text)
+        print("===============================\n")
+    except Exception as e:
+        print("Sheets ERROR:", e)
 
-    # Zebra update
-    update_zebra_attendance(
+    # --- Zebra ---
+    zebra_resp = update_zebra_attendance(
         family_id=family_id,
         event_id=event_id,
         status=status,
-        qty=qty
+        qty=tickets
     )
 
-    return jsonify({"success": True})
+    return jsonify({"success": True, "zebra": zebra_resp})
 
 
-# =====================================================
-# עמוד תודה
-# =====================================================
+# =========================
+# תודה
+# =========================
 @app.route("/thanks")
 def thanks():
     return render_template(
@@ -223,9 +235,9 @@ def thanks():
     )
 
 
-# =====================================================
-# Health check
-# =====================================================
+# =========================
+# Health
+# =========================
 @app.route("/")
 def home():
     return "OK – server is running!"
