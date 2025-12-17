@@ -1,3 +1,4 @@
+from zebra_api import update_askev_attendance
 from flask import Flask, request, render_template, jsonify
 import requests
 import datetime
