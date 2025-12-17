@@ -1,9 +1,13 @@
 from flask import Flask, request, render_template, redirect, url_for
 import requests
 import datetime
+from urllib.parse import urlparse, parse_qs
 
 app = Flask(__name__)
 
+# =========================
+# CONFIG
+# =========================
 GOOGLE_SHEET_WEBHOOK = "PASTE_HERE_FULL_HTTPS_WEBHOOK_URL"
 
 ZEBRA_URL = "https://25098.zebracrm.com/ext_interface.php?b=update_customer"
@@ -12,6 +16,9 @@ ZEBRA_PASS = "1q2w3e4r"
 
 FIXED_DATE = "17/12/2025"
 
+# =========================
+# CONFIRM PAGE
+# =========================
 @app.route("/confirm")
 def confirm():
     event_id = request.args.get("event_id")
@@ -31,69 +38,41 @@ def confirm():
         location="ירושלים"
     )
 
+# =========================
+# SUBMIT
+# =========================
 @app.route("/submit", methods=["POST"])
 def submit():
-    # =========================
-    # DEBUG: מה באמת הגיע לשרת
-    # =========================
-    raw_body = request.get_data(as_text=True)  # לא OCR, זה גוף הבקשה
-    json_data = request.get_json(silent=True)  # לא מכריח JSON
+    # -------------------------------------------------
+    # שליפת נתונים מה-Referer (עובד בוודאות לפי הלוגים)
+    # -------------------------------------------------
+    referer = request.headers.get("Referer", "")
+    qs = parse_qs(urlparse(referer).query)
 
-    print("===== SUBMIT DEBUG =====")
-    print("Content-Type:", request.content_type)
-    print("Args:", dict(request.args))
-    print("Form:", dict(request.form))
-    print("JSON:", json_data)
-    print("Raw body:", raw_body[:1000])  # חותך כדי לא לפוצץ לוגים
-    print("========================")
+    event_id = qs.get("event_id", [None])[0]
+    family_id = qs.get("family_id", [None])[0]
 
-    # =========================
-    # קליטה חזקה: JSON / FORM / QUERY
-    # =========================
-    event_id = None
-    family_id = None
-    status = None
-    tickets = None
+    # סטטוס וכמות – אם נשלחו, ניקח, אם לא – ברירת מחדל
+    status = request.form.get("status") or request.args.get("status") or "no"
+    tickets = request.form.get("tickets") or request.args.get("tickets") or 0
 
-    # 1) JSON
-    if isinstance(json_data, dict):
-        event_id = json_data.get("event_id")
-        family_id = json_data.get("family_id")
-        status = json_data.get("status")
-        tickets = json_data.get("tickets")
-
-    # 2) FORM
-    if not event_id or not family_id:
-        event_id = event_id or request.form.get("event_id")
-        family_id = family_id or request.form.get("family_id")
-        status = status or request.form.get("status")
-        tickets = tickets if tickets is not None else request.form.get("tickets")
-
-    # 3) QUERYSTRING
-    if not event_id or not family_id:
-        event_id = event_id or request.args.get("event_id")
-        family_id = family_id or request.args.get("family_id")
-        status = status or request.args.get("status")
-        tickets = tickets if tickets is not None else request.args.get("tickets")
-
-    status = status or "no"
     try:
-        tickets = int(tickets or 0)
-    except Exception:
+        tickets = int(tickets)
+    except:
         tickets = 0
 
     if not event_id or not family_id:
-        # זה מה שיצר לך 400 — עכשיו זה יהיה ברור בלוג מה חסר
         return "Missing family_id or event_id", 400
 
-    # =========================
-    # Google Sheets (לא נוגע לוגיקה)
-    # =========================
+    # -------------------------
+    # SEND TO GOOGLE SHEETS
+    # (לא נוגע בלוגיקה)
+    # -------------------------
     try:
         sheet_payload = {
             "timestamp": datetime.datetime.now().isoformat(),
-            "event_id": str(event_id),
-            "family_id": str(family_id),
+            "event_id": event_id,
+            "family_id": family_id,
             "status": status,
             "tickets": tickets,
             "user_agent": request.headers.get("User-Agent"),
@@ -107,9 +86,9 @@ def submit():
     except Exception as e:
         print("Sheets error:", e)
 
-    # =========================
-    # Zebra XML — כמו פוסטמן + תאריך קבוע
-    # =========================
+    # -------------------------
+    # SEND TO ZEBRA (XML בלבד)
+    # -------------------------
     zebra_status = "אישרו" if status == "yes" else "ביטלו"
     zebra_tickets = tickets if status == "yes" else 0
 
@@ -157,6 +136,9 @@ def submit():
 
     return redirect(url_for("thanks", status=status, qty=zebra_tickets))
 
+# =========================
+# THANK YOU PAGE
+# =========================
 @app.route("/thanks")
 def thanks():
     return render_template(
@@ -165,9 +147,15 @@ def thanks():
         qty=request.args.get("qty")
     )
 
+# =========================
+# ROOT (health)
+# =========================
 @app.route("/")
 def root():
     return "OK"
 
+# =========================
+# RUN
+# =========================
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=10000)
