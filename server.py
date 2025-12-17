@@ -35,7 +35,6 @@ def confirm():
 def submit():
     data = request.get_json(silent=True) or request.form
 
-
     event_id = data.get("event_id")
     family_id = data.get("family_id")
     status = data.get("status")
@@ -43,6 +42,7 @@ def submit():
 
     if not event_id or not family_id:
         return "Missing family_id or event_id", 400
+
 
     # ===== Google Sheets (ללא שינוי) =====
     try:
