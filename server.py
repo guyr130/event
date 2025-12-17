@@ -1,4 +1,4 @@
-from flask import Flask, request, render_template, jsonify
+from flask import Flask, request, render_template, jsonify, redirect
 import requests
 import datetime
 from zebra_api import update_askev_attendance
@@ -8,7 +8,8 @@ app = Flask(__name__)
 # =========================
 # CONFIG
 # =========================
-GOOGLE_SHEET_WEBHOOK = "PASTE_HERE_YOUR_SHEETS_WEBHOOK_URL"
+GOOGLE_SHEET_WEBHOOK = "https://script.google.com/macros/s/XXXXXXXX/exec"
+# ⬆️ חובה להחליף ל־URL האמיתי שלך
 
 # =========================
 # CONFIRM PAGE
@@ -25,7 +26,7 @@ def confirm():
         "confirm.html",
         event_id=event_id,
         zebra_family_id=family_id,
-        family_name="משפחה לדוגמה",
+        family_name="משפחת ביטון",
         tickets=2,
         event_name="אירוע בדיקה",
         event_date="17/12/2025",
@@ -39,14 +40,13 @@ def confirm():
 def submit():
     data = request.get_json()
 
-    event_id = int(data.get("event_id"))
-    family_id = int(data.get("family_id"))
+    event_id = data.get("event_id")
+    family_id = data.get("family_id")
     status = data.get("status")        # yes / no
-    tickets = int(data.get("tickets"))
+    tickets = int(data.get("tickets", 0))
 
-    # =========================
-    # SEND TO GOOGLE SHEETS
-    # =========================
+    approval_date = datetime.datetime.now().strftime("%d/%m/%Y")
+
     payload = {
         "timestamp": datetime.datetime.now().isoformat(),
         "event_id": event_id,
@@ -54,57 +54,39 @@ def submit():
         "status": status,
         "tickets": tickets,
         "user_agent": request.headers.get("User-Agent"),
-        "ip": request.remote_addr
+        "ip": request.headers.get("X-Forwarded-For", request.remote_addr)
     }
 
+    # ---- GOOGLE SHEETS ----
     try:
-        requests.post(GOOGLE_SHEET_WEBHOOK, json=payload, timeout=5)
+        r = requests.post(GOOGLE_SHEET_WEBHOOK, json=payload, timeout=5)
+        print("Sheets response:", r.status_code, r.text)
     except Exception as e:
         print("Sheets error:", e)
 
-    # =========================
-    # PREPARE ZEBRA DATA
-    # =========================
-    today = datetime.datetime.now().strftime("%d/%m/%Y")
-
-    if status == "yes":
-        zebra_status = "אישרו"
-        arrived_qty = tickets
-    else:
-        zebra_status = "ביטלו"
-        arrived_qty = 0
-
-    # =========================
-    # SEND TO ZEBRA
-    # =========================
+    # ---- ZEBRA ASKEV ----
     try:
-        code, zebra_response = update_askev_attendance(
+        update_askev_attendance(
             family_id=family_id,
             event_id=event_id,
-            status_text=zebra_status,
-            arrived_qty=arrived_qty,
-            approval_date=today
+            status=status,
+            tickets=tickets,
+            approval_date=approval_date
         )
-        print("ZEBRA CODE:", code)
-        print("ZEBRA RESPONSE:", zebra_response)
-
     except Exception as e:
         print("Zebra error:", e)
 
-    return jsonify({"ok": True})
+    return redirect(f"/thanks?status={status}&qty={tickets}")
 
 # =========================
 # THANK YOU PAGE
 # =========================
 @app.route("/thanks")
 def thanks():
-    status = request.args.get("status")
-    qty = request.args.get("qty")
-
     return render_template(
         "thanks.html",
-        status=status,
-        qty=qty
+        status=request.args.get("status"),
+        qty=request.args.get("qty")
     )
 
 # =========================
@@ -115,7 +97,7 @@ def root():
     return "OK"
 
 # =========================
-# RUN
+# RUN (local only)
 # =========================
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=10000)
