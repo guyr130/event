@@ -33,33 +33,83 @@ def confirm():
 
 @app.route("/submit", methods=["POST"])
 def submit():
-    data = request.get_json(silent=True) or request.form
+    # =========================
+    # DEBUG: מה באמת הגיע לשרת
+    # =========================
+    raw_body = request.get_data(as_text=True)  # לא OCR, זה גוף הבקשה
+    json_data = request.get_json(silent=True)  # לא מכריח JSON
 
-    event_id = data.get("event_id")
-    family_id = data.get("family_id")
-    status = data.get("status")
-    tickets = int(data.get("tickets", 0))
+    print("===== SUBMIT DEBUG =====")
+    print("Content-Type:", request.content_type)
+    print("Args:", dict(request.args))
+    print("Form:", dict(request.form))
+    print("JSON:", json_data)
+    print("Raw body:", raw_body[:1000])  # חותך כדי לא לפוצץ לוגים
+    print("========================")
+
+    # =========================
+    # קליטה חזקה: JSON / FORM / QUERY
+    # =========================
+    event_id = None
+    family_id = None
+    status = None
+    tickets = None
+
+    # 1) JSON
+    if isinstance(json_data, dict):
+        event_id = json_data.get("event_id")
+        family_id = json_data.get("family_id")
+        status = json_data.get("status")
+        tickets = json_data.get("tickets")
+
+    # 2) FORM
+    if not event_id or not family_id:
+        event_id = event_id or request.form.get("event_id")
+        family_id = family_id or request.form.get("family_id")
+        status = status or request.form.get("status")
+        tickets = tickets if tickets is not None else request.form.get("tickets")
+
+    # 3) QUERYSTRING
+    if not event_id or not family_id:
+        event_id = event_id or request.args.get("event_id")
+        family_id = family_id or request.args.get("family_id")
+        status = status or request.args.get("status")
+        tickets = tickets if tickets is not None else request.args.get("tickets")
+
+    status = status or "no"
+    try:
+        tickets = int(tickets or 0)
+    except Exception:
+        tickets = 0
 
     if not event_id or not family_id:
+        # זה מה שיצר לך 400 — עכשיו זה יהיה ברור בלוג מה חסר
         return "Missing family_id or event_id", 400
 
-
-    # ===== Google Sheets (ללא שינוי) =====
+    # =========================
+    # Google Sheets (לא נוגע לוגיקה)
+    # =========================
     try:
         sheet_payload = {
             "timestamp": datetime.datetime.now().isoformat(),
-            "event_id": event_id,
-            "family_id": family_id,
+            "event_id": str(event_id),
+            "family_id": str(family_id),
             "status": status,
             "tickets": tickets,
             "user_agent": request.headers.get("User-Agent"),
             "ip": request.remote_addr
         }
-        requests.post(GOOGLE_SHEET_WEBHOOK, json=sheet_payload, timeout=5)
+        r = requests.post(GOOGLE_SHEET_WEBHOOK, json=sheet_payload, timeout=5)
+        print("===== SENT TO GOOGLE SHEETS =====")
+        print(sheet_payload)
+        print("Sheets response:", r.status_code, r.text)
+        print("================================")
     except Exception as e:
         print("Sheets error:", e)
 
-    # ===== Zebra API – זהה לפוסטמן =====
+    # =========================
+    # Zebra XML — כמו פוסטמן + תאריך קבוע
+    # =========================
     zebra_status = "אישרו" if status == "yes" else "ביטלו"
     zebra_tickets = tickets if status == "yes" else 0
 
@@ -89,18 +139,21 @@ def submit():
 </ROOT>
 """
 
-    print("===== ZEBRA REQUEST =====")
-    print(zebra_xml)
+    try:
+        print("===== ZEBRA REQUEST =====")
+        print(zebra_xml)
 
-    zr = requests.post(
-        ZEBRA_URL,
-        data=zebra_xml.encode("utf-8"),
-        headers={"Content-Type": "application/xml; charset=utf-8"},
-        timeout=10
-    )
+        zr = requests.post(
+            ZEBRA_URL,
+            data=zebra_xml.encode("utf-8"),
+            headers={"Content-Type": "application/xml; charset=utf-8"},
+            timeout=10
+        )
 
-    print("===== ZEBRA RESPONSE =====")
-    print(zr.text)
+        print("===== ZEBRA RESPONSE =====")
+        print(zr.text)
+    except Exception as e:
+        print("Zebra error:", e)
 
     return redirect(url_for("thanks", status=status, qty=zebra_tickets))
 
@@ -115,3 +168,6 @@ def thanks():
 @app.route("/")
 def root():
     return "OK"
+
+if __name__ == "__main__":
+    app.run(host="0.0.0.0", port=10000)
