@@ -35,15 +35,15 @@ def confirm():
 def submit():
     data = request.get_json(force=True)
 
-    event_id = data.get("event_id") or request.args.get("event_id")
-    family_id = data.get("family_id") or request.args.get("family_id")
+    event_id = data.get("event_id")
+    family_id = data.get("family_id")
     status = data.get("status")
     tickets = int(data.get("tickets", 0))
 
     if not event_id or not family_id:
         return "Missing family_id or event_id", 400
 
-    # Google Sheets
+    # ===== Google Sheets (ללא שינוי) =====
     try:
         sheet_payload = {
             "timestamp": datetime.datetime.now().isoformat(),
@@ -58,6 +58,7 @@ def submit():
     except Exception as e:
         print("Sheets error:", e)
 
+    # ===== Zebra API – זהה לפוסטמן =====
     zebra_status = "אישרו" if status == "yes" else "ביטלו"
     zebra_tickets = tickets if status == "yes" else 0
 
@@ -68,8 +69,11 @@ def submit():
 <PASSWORD>{ZEBRA_PASS}</PASSWORD>
 </PERMISSION>
 <CARD_TYPE>business_customer</CARD_TYPE>
-<IDENTIFIER><ID>{family_id}</ID></IDENTIFIER>
-<CUST_DETAILS></CUST_DETAILS>
+<IDENTIFIER>
+<ID>{family_id}</ID>
+</IDENTIFIER>
+<CUST_DETAILS>
+</CUST_DETAILS>
 <CONNECTION_CARD_DETAILS>
 <UPDATE_EVEN_CONNECTED>1</UPDATE_EVEN_CONNECTED>
 <CONNECTION_KEY>ASKEV</CONNECTION_KEY>
@@ -81,7 +85,8 @@ def submit():
 <NO_ARIVE>{zebra_tickets}</NO_ARIVE>
 </FIELDS>
 </CONNECTION_CARD_DETAILS>
-</ROOT>"""
+</ROOT>
+"""
 
     print("===== ZEBRA REQUEST =====")
     print(zebra_xml)
@@ -89,7 +94,7 @@ def submit():
     zr = requests.post(
         ZEBRA_URL,
         data=zebra_xml.encode("utf-8"),
-        headers={"Content-Type": "application/xml"},
+        headers={"Content-Type": "application/xml; charset=utf-8"},
         timeout=10
     )
 
@@ -100,9 +105,11 @@ def submit():
 
 @app.route("/thanks")
 def thanks():
-    return render_template("thanks.html",
-                           status=request.args.get("status"),
-                           qty=request.args.get("qty"))
+    return render_template(
+        "thanks.html",
+        status=request.args.get("status"),
+        qty=request.args.get("qty")
+    )
 
 @app.route("/")
 def root():
