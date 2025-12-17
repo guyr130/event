@@ -7,7 +7,9 @@ ZEBRA_PASS = "1q2w3e4r"
 def update_askev_attendance(family_id, event_id, status, tickets):
     ac_value = "אישרו" if status == "yes" else "ביטלו"
     arrive_qty = tickets if status == "yes" else 0
-    approval_date = __import__("datetime").datetime.now().strftime("%d/%m/%Y")
+
+    # תאריך קבוע לפי דרישה
+    approval_date = "17/12/2025"
 
     xml = f"""<?xml version="1.0" encoding="utf-8"?>
 <ROOT>
@@ -40,7 +42,12 @@ def update_askev_attendance(family_id, event_id, status, tickets):
 """
 
     headers = {"Content-Type": "application/xml; charset=utf-8"}
-    response = requests.post(ZEBRA_URL, data=xml.encode("utf-8"), headers=headers, timeout=10)
+    response = requests.post(
+        ZEBRA_URL,
+        data=xml.encode("utf-8"),
+        headers=headers,
+        timeout=10
+    )
 
     print("===== ZEBRA REQUEST =====")
     print(xml)
