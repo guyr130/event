@@ -4,9 +4,10 @@ ZEBRA_URL = "https://25098.zebracrm.com/ext_interface.php?b=update_customer"
 ZEBRA_USER = "IVAPP"
 ZEBRA_PASS = "1q2w3e4r"
 
-def update_askev_attendance(family_id, event_id, status, tickets, approval_date):
+def update_askev_attendance(family_id, event_id, status, tickets):
     ac_value = "אישרו" if status == "yes" else "ביטלו"
     arrive_qty = tickets if status == "yes" else 0
+    approval_date = __import__("datetime").datetime.now().strftime("%d/%m/%Y")
 
     xml = f"""<?xml version="1.0" encoding="utf-8"?>
 <ROOT>
@@ -29,11 +30,11 @@ def update_askev_attendance(family_id, event_id, status, tickets, approval_date)
         <KEY>ID</KEY>
         <VALUE>{event_id}</VALUE>
 
-        <FIELDS>
+        <CON_FIELDS>
             <A_C>{ac_value}</A_C>
             <A_D>{approval_date}</A_D>
             <NO_ARIVE>{arrive_qty}</NO_ARIVE>
-        </FIELDS>
+        </CON_FIELDS>
     </CONNECTION_CARD_DETAILS>
 </ROOT>
 """
@@ -41,9 +42,9 @@ def update_askev_attendance(family_id, event_id, status, tickets, approval_date)
     headers = {"Content-Type": "application/xml; charset=utf-8"}
     response = requests.post(ZEBRA_URL, data=xml.encode("utf-8"), headers=headers, timeout=10)
 
-    print("[ZEBRA REQUEST]")
+    print("===== ZEBRA REQUEST =====")
     print(xml)
-    print("[ZEBRA RESPONSE]")
+    print("===== ZEBRA RESPONSE =====")
     print(response.text)
 
     return response.text
