@@ -89,13 +89,11 @@ function sendResponse(status) {
     const qtySelect = document.getElementById("qty");
     let qty = qtySelect.value;
 
-    // אם מגיעים – חייבים כמות
     if (status === "yes" && !qty) {
         alert("אנא בחרו כמות כרטיסים");
         return;
     }
 
-    // אם לא מגיעים – כמות = 0
     if (status === "no") {
         qty = 0;
     }
@@ -104,8 +102,8 @@ function sendResponse(status) {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-            event_id: "{{ request.args.get('event_id') }}",
-            family_id: "{{ request.args.get('family_id') }}",
+            event_id: "{{ event_id }}",
+            family_id: "{{ zebra_family_id }}", // ⭐ ID אמיתי בזברה
             status: status,
             tickets: qty
         })
