@@ -23,7 +23,7 @@ GOOGLE_SHEETS_WEBAPP_URL = (
 )
 
 # =========================
-# שליפת נתוני אירוע + משפחות
+# שליפת אירוע + ASKEV
 # =========================
 def get_event_data(event_id):
     xml_body = f"""
@@ -61,22 +61,18 @@ def get_event_data(event_id):
 """.strip()
 
     headers = {"Content-Type": "application/xml; charset=utf-8"}
-    response = requests.post(ZEBRA_GET_URL, data=xml_body.encode("utf-8"), headers=headers, timeout=20)
+    r = requests.post(ZEBRA_GET_URL, data=xml_body.encode("utf-8"), headers=headers, timeout=20)
 
     print("\n===== RAW XML FROM ZEBRA =====")
-    print(response.text)
+    print(r.text)
     print("===== END RAW XML =====\n")
 
-    raw = (response.text or "").strip()
-    if not raw:
-        return None
-
-    tree = ET.fromstring(raw)
+    tree = ET.fromstring(r.text)
     card = tree.find(".//CARD")
     if card is None:
         return None
 
-    event_data = {
+    event = {
         "event_name": card.findtext(".//EV_N", ""),
         "event_date": card.findtext(".//EV_D", ""),
         "event_time": card.findtext(".//EVE_HOUR", ""),
@@ -88,24 +84,26 @@ def get_event_data(event_id):
     if connections is not None:
         for el in connections:
             if el.tag.startswith("CARD_CONNECTION_"):
-                event_data["families"].append({
-                    "id": el.findtext("ID", ""),
+                connection_id = el.tag.replace("CARD_CONNECTION_", "")
+
+                event["families"].append({
+                    "zebra_customer_id": el.findtext("ID", ""),   # כרטיס משפחה
+                    "connection_id": connection_id,              # ⭐ ASKEV ID
                     "family_name": el.findtext(".//CO_NAME", ""),
                     "tickets_approved": el.findtext(".//TOT_FFAM", "0"),
                     "approved": el.findtext(".//PROV", "0")
                 })
 
-    return event_data
+    return event
 
 
 # =========================
-# עדכון ASKEV (כרטיס קשר) - דרך CON_FIELDS
+# עדכון ASKEV (החלק הקריטי)
 # =========================
-def update_askev_connection(family_id, event_id, status, qty):
+def update_askev(zebra_customer_id, connection_id, status, qty):
     status_text = "אישרו" if status == "yes" else "ביטלו"
-    today = datetime.now().strftime("%d/%m/%Y")  # כמו שביקשת 01/01/2025
+    today = datetime.now().strftime("%d/%m/%Y")
 
-    # חשוב: השדות יורדים ל-CON_FIELDS כי זה "שדות קשר" של ASKEV
     xml_body = f"""<?xml version="1.0" encoding="utf-8"?>
 <ROOT>
     <PERMISSION>
@@ -116,17 +114,17 @@ def update_askev_connection(family_id, event_id, status, qty):
     <CARD_TYPE>business_customer</CARD_TYPE>
 
     <IDENTIFIER>
-        <ID>{family_id}</ID>
+        <ID>{zebra_customer_id}</ID>
     </IDENTIFIER>
 
-    <!-- חובה גם אם ריק -->
     <CUST_DETAILS></CUST_DETAILS>
 
     <CONNECTION_CARD_DETAILS>
         <UPDATE_EVEN_CONNECTED>1</UPDATE_EVEN_CONNECTED>
         <CONNECTION_KEY>ASKEV</CONNECTION_KEY>
-        <KEY>ID</KEY>
-        <VALUE>{event_id}</VALUE>
+
+        <KEY>CONNECTION_ID</KEY>
+        <VALUE>{connection_id}</VALUE>
 
         <CON_FIELDS>
             <A_C>{status_text}</A_C>
@@ -137,20 +135,14 @@ def update_askev_connection(family_id, event_id, status, qty):
 </ROOT>
 """
 
-    print("\n>>> ABOUT TO UPDATE ZEBRA (ASKEV) <<<")
+    print("\n>>> UPDATE ASKEV <<<")
     print(xml_body)
 
     headers = {"Content-Type": "application/xml; charset=utf-8"}
-    r = requests.post(
-        ZEBRA_UPDATE_URL,
-        data=xml_body.encode("utf-8"),
-        headers=headers,
-        timeout=20
-    )
+    r = requests.post(ZEBRA_UPDATE_URL, data=xml_body.encode("utf-8"), headers=headers, timeout=20)
 
-    print("[ZEBRA] RESPONSE:")
+    print("[ZEBRA RESPONSE]")
     print(r.text)
-
     return r.text
 
 
@@ -160,16 +152,17 @@ def update_askev_connection(family_id, event_id, status, qty):
 @app.route("/confirm")
 def confirm():
     event_id = request.args.get("event_id")
-    family_id = request.args.get("family_id")
-
-    if not event_id or not family_id:
-        return "Missing event_id or family_id", 400
+    family_id = request.args.get("family_id")  # zebra_customer_id
 
     event = get_event_data(event_id)
     if not event:
         return "Event not found", 404
 
-    fam = next((f for f in event["families"] if str(f["id"]) == str(family_id)), None)
+    fam = next(
+        (f for f in event["families"] if f["zebra_customer_id"] == family_id),
+        None
+    )
+
     if not fam:
         return "Family not found", 404
 
@@ -181,48 +174,42 @@ def confirm():
         event_date=event["event_date"],
         event_time=event["event_time"],
         location=event["event_location"],
-        event_id=str(event_id),
-        zebra_family_id=str(family_id)
+        event_id=event_id,
+        zebra_family_id=fam["zebra_customer_id"],
+        connection_id=fam["connection_id"]   # ⭐ חשוב
     )
 
 
 # =========================
-# קבלת אישור → Sheets + Zebra (ASKEV)
+# submit → Sheets + Zebra
 # =========================
 @app.route("/submit", methods=["POST"])
 def submit():
     data = request.json or {}
 
-    event_id = str(data.get("event_id", "")).strip()
-    family_id = str(data.get("family_id", "")).strip()
-    status = str(data.get("status", "")).strip()  # yes/no
-    tickets = int(data.get("tickets", 0) or 0)
+    zebra_customer_id = str(data.get("family_id"))
+    connection_id = str(data.get("connection_id"))
+    event_id = str(data.get("event_id"))
+    status = data.get("status")
+    tickets = int(data.get("tickets", 0))
 
-    # --- Sheets payload ---
+    # --- Google Sheets ---
     payload = {
         "timestamp": datetime.now().isoformat(),
         "event_id": event_id,
-        "family_id": family_id,
+        "family_id": zebra_customer_id,
         "status": status,
         "tickets": tickets,
-        "user_agent": request.headers.get("User-Agent", ""),
         "ip": request.headers.get("X-Forwarded-For", request.remote_addr),
+        "user_agent": request.headers.get("User-Agent", "")
     }
 
-    # --- Sheets ---
-    try:
-        r = requests.post(GOOGLE_SHEETS_WEBAPP_URL, json=payload, timeout=10)
-        print("===== SENT TO GOOGLE SHEETS =====")
-        print(payload)
-        print("Sheets response:", r.status_code, r.text)
-        print("================================\n")
-    except Exception as e:
-        print("Sheets ERROR:", e)
+    requests.post(GOOGLE_SHEETS_WEBAPP_URL, json=payload, timeout=10)
 
     # --- Zebra ASKEV ---
-    zebra_resp = update_askev_connection(
-        family_id=family_id,
-        event_id=event_id,
+    zebra_resp = update_askev(
+        zebra_customer_id=zebra_customer_id,
+        connection_id=connection_id,
         status=status,
         qty=tickets
     )
