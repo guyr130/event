@@ -8,7 +8,6 @@ def update_askev_attendance(family_id, event_id, status, tickets):
     ac_value = "אישרו" if status == "yes" else "ביטלו"
     arrive_qty = tickets if status == "yes" else 0
 
-    # תאריך קבוע לפי דרישה
     approval_date = "17/12/2025"
 
     xml = f"""<?xml version="1.0" encoding="utf-8"?>
@@ -32,11 +31,11 @@ def update_askev_attendance(family_id, event_id, status, tickets):
         <KEY>ID</KEY>
         <VALUE>{event_id}</VALUE>
 
-        <CON_FIELDS>
+        <FIELDS>
             <A_C>{ac_value}</A_C>
             <A_D>{approval_date}</A_D>
             <NO_ARIVE>{arrive_qty}</NO_ARIVE>
-        </CON_FIELDS>
+        </FIELDS>
     </CONNECTION_CARD_DETAILS>
 </ROOT>
 """
