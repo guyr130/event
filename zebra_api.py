@@ -1,27 +1,14 @@
-# zebra_api.py
-# -*- coding: utf-8 -*-
-
 import requests
-from datetime import datetime
 
 ZEBRA_URL = "https://25098.zebracrm.com/ext_interface.php?b=update_customer"
 ZEBRA_USER = "IVAPP"
 ZEBRA_PASS = "1q2w3e4r"
 
+def update_askev_attendance(family_id, event_id, status, tickets, approval_date):
+    ac_value = "אישרו" if status == "yes" else "ביטלו"
+    arrive_qty = tickets if status == "yes" else 0
 
-def update_askev_attendance(
-    family_id: int,
-    event_id: int,
-    status_text: str,
-    arrived_qty: int
-):
-    """
-    עדכון אישור הגעה בכרטיס קשר ASKEV
-    """
-
-    today = datetime.now().strftime("%d/%m/%Y")
-
-    xml_body = f"""<?xml version="1.0" encoding="utf-8"?>
+    xml = f"""<?xml version="1.0" encoding="utf-8"?>
 <ROOT>
     <PERMISSION>
         <USERNAME>{ZEBRA_USER}</USERNAME>
@@ -43,23 +30,20 @@ def update_askev_attendance(
         <VALUE>{event_id}</VALUE>
 
         <FIELDS>
-            <A_C>{status_text}</A_C>
-            <A_D>{today}</A_D>
-            <NO_ARIVE>{arrived_qty}</NO_ARIVE>
+            <A_C>{ac_value}</A_C>
+            <A_D>{approval_date}</A_D>
+            <NO_ARIVE>{arrive_qty}</NO_ARIVE>
         </FIELDS>
     </CONNECTION_CARD_DETAILS>
 </ROOT>
 """
 
-    headers = {
-        "Content-Type": "application/xml; charset=utf-8"
-    }
+    headers = {"Content-Type": "application/xml; charset=utf-8"}
+    response = requests.post(ZEBRA_URL, data=xml.encode("utf-8"), headers=headers, timeout=10)
 
-    response = requests.post(
-        ZEBRA_URL,
-        data=xml_body.encode("utf-8"),
-        headers=headers,
-        timeout=20
-    )
+    print("[ZEBRA REQUEST]")
+    print(xml)
+    print("[ZEBRA RESPONSE]")
+    print(response.text)
 
-    return response.status_code, response.text
+    return response.text
