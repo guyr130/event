@@ -5,26 +5,24 @@ from datetime import datetime
 
 app = Flask(__name__)
 
-# =========================
-# Zebra API
-# =========================
-ZEBRA_GET_URL = "https://25098.zebracrm.com/ext_interface.php?b=get_multi_cards_details"
-ZEBRA_UPDATE_URL = "https://25098.zebracrm.com/ext_interface.php?b=update_customer"
+# ========================
+# Zebra credentials
+# ========================
 ZEBRA_USER = "IVAPP"
 ZEBRA_PASS = "1q2w3e4r"
 
-# =========================
-# Google Sheets Web App
-# =========================
-GOOGLE_SHEETS_WEBAPP_URL = (
-    "https://script.google.com/macros/s/"
-    "AKfycbyK2wobbQUnN8hQ2HwL9sauJ4Nv8N3JpsRCdGGlrAY4KmEPnq2CUZFBaC_GZXJ7I3HT"
-    "/exec"
-)
+ZEBRA_GET_URL = "https://25098.zebracrm.com/ext_interface.php?b=get_multi_cards_details"
+ZEBRA_UPDATE_URL = "https://25098.zebracrm.com/ext_interface.php"
 
-# =========================
-# שליפת אירוע + ASKEV
-# =========================
+# ========================
+# Google Sheets WebApp
+# ========================
+GOOGLE_SHEETS_WEBAPP_URL = "https://script.google.com/macros/s/AKfycbyK2wobbQUnN8hQ2HwL9sauJ4Nv8N3JpsRCdGGlrAY4KmEPnq2CUZFBaC_GZXJ7I3HT/exec"
+
+
+# ========================
+# Fetch event + ASKEV
+# ========================
 def get_event_data(event_id):
     xml_body = f"""
 <ROOT>
@@ -36,32 +34,34 @@ def get_event_data(event_id):
     <ID_FILTER>{event_id}</ID_FILTER>
 
     <FIELDS>
-        <EV_N></EV_N>
-        <EV_D></EV_D>
-        <EVE_HOUR></EVE_HOUR>
-        <EVE_LOC></EVE_LOC>
+        <EV_N/>
+        <EV_D/>
+        <EVE_HOUR/>
+        <EVE_LOC/>
     </FIELDS>
 
     <CONNECTION_CARDS>
         <CONNECTION_CARD>
             <CONNECTION_KEY>ASKEV</CONNECTION_KEY>
-
             <FIELDS>
-                <ID></ID>
-                <CO_NAME></CO_NAME>
+                <ID/>
+                <CO_NAME/>
             </FIELDS>
-
             <CON_FIELDS>
-                <TOT_FFAM></TOT_FFAM>
-                <PROV></PROV>
+                <TOT_FFAM/>
+                <PROV/>
             </CON_FIELDS>
         </CONNECTION_CARD>
     </CONNECTION_CARDS>
 </ROOT>
 """.strip()
 
-    headers = {"Content-Type": "application/xml; charset=utf-8"}
-    r = requests.post(ZEBRA_GET_URL, data=xml_body.encode("utf-8"), headers=headers, timeout=20)
+    r = requests.post(
+        ZEBRA_GET_URL,
+        data=xml_body.encode("utf-8"),
+        headers={"Content-Type": "application/xml"},
+        timeout=20
+    )
 
     print("\n===== RAW XML FROM ZEBRA =====")
     print(r.text)
@@ -81,30 +81,27 @@ def get_event_data(event_id):
     }
 
     connections = card.find("CONNECTIONS_CARDS")
-    if connections is not None:
-        for el in connections:
-            if el.tag.startswith("CARD_CONNECTION_"):
-                connection_id = el.tag.replace("CARD_CONNECTION_", "")
-
-                event["families"].append({
-                    "zebra_customer_id": el.findtext("ID", ""),   # כרטיס משפחה
-                    "connection_id": connection_id,              # ⭐ ASKEV ID
-                    "family_name": el.findtext(".//CO_NAME", ""),
-                    "tickets_approved": el.findtext(".//TOT_FFAM", "0"),
-                    "approved": el.findtext(".//PROV", "0")
-                })
+    for conn in connections:
+        if conn.tag.startswith("CARD_CONNECTION_"):
+            event["families"].append({
+                "id": conn.findtext("ID"),
+                "family_name": conn.findtext(".//CO_NAME"),
+                "tickets": conn.findtext(".//TOT_FFAM", "0"),
+                "prov": conn.findtext(".//PROV", "0")
+            })
 
     return event
 
 
-# =========================
-# עדכון ASKEV (החלק הקריטי)
-# =========================
-def update_askev(zebra_customer_id, connection_id, status, qty):
-    status_text = "אישרו" if status == "yes" else "ביטלו"
+# ========================
+# Update ASKEV (THE FIX)
+# ========================
+def update_askev(family_id, event_id, status, tickets):
     today = datetime.now().strftime("%d/%m/%Y")
+    status_text = "אישרו" if status == "yes" else "ביטלו"
+    qty = tickets if status == "yes" else 0
 
-    xml_body = f"""<?xml version="1.0" encoding="utf-8"?>
+    xml_body = f"""
 <ROOT>
     <PERMISSION>
         <USERNAME>{ZEBRA_USER}</USERNAME>
@@ -114,7 +111,7 @@ def update_askev(zebra_customer_id, connection_id, status, qty):
     <CARD_TYPE>business_customer</CARD_TYPE>
 
     <IDENTIFIER>
-        <ID>{zebra_customer_id}</ID>
+        <ID>{family_id}</ID>
     </IDENTIFIER>
 
     <CUST_DETAILS></CUST_DETAILS>
@@ -123,8 +120,9 @@ def update_askev(zebra_customer_id, connection_id, status, qty):
         <UPDATE_EVEN_CONNECTED>1</UPDATE_EVEN_CONNECTED>
         <CONNECTION_KEY>ASKEV</CONNECTION_KEY>
 
-        <KEY>CONNECTION_ID</KEY>
-        <VALUE>{connection_id}</VALUE>
+        <!-- IMPORTANT -->
+        <KEY>ID</KEY>
+        <VALUE>{event_id}</VALUE>
 
         <CON_FIELDS>
             <A_C>{status_text}</A_C>
@@ -133,71 +131,69 @@ def update_askev(zebra_customer_id, connection_id, status, qty):
         </CON_FIELDS>
     </CONNECTION_CARD_DETAILS>
 </ROOT>
-"""
+""".strip()
 
     print("\n>>> UPDATE ASKEV <<<")
     print(xml_body)
 
-    headers = {"Content-Type": "application/xml; charset=utf-8"}
-    r = requests.post(ZEBRA_UPDATE_URL, data=xml_body.encode("utf-8"), headers=headers, timeout=20)
+    r = requests.post(
+        ZEBRA_UPDATE_URL,
+        data=xml_body.encode("utf-8"),
+        headers={"Content-Type": "application/xml"},
+        timeout=20
+    )
 
     print("[ZEBRA RESPONSE]")
     print(r.text)
-    return r.text
+
+    return "code>0" in r.text or "SUCCESS" in r.text
 
 
-# =========================
-# דף אישור הגעה
-# =========================
+# ========================
+# Confirm page
+# ========================
 @app.route("/confirm")
 def confirm():
     event_id = request.args.get("event_id")
-    family_id = request.args.get("family_id")  # zebra_customer_id
+    family_id = request.args.get("family_id")
 
     event = get_event_data(event_id)
     if not event:
         return "Event not found", 404
 
-    fam = next(
-        (f for f in event["families"] if f["zebra_customer_id"] == family_id),
-        None
-    )
-
+    fam = next((f for f in event["families"] if f["id"] == family_id), None)
     if not fam:
         return "Family not found", 404
 
     return render_template(
         "confirm.html",
         family_name=fam["family_name"],
-        tickets=int(fam["tickets_approved"]),
+        tickets=int(fam["tickets"]),
         event_name=event["event_name"],
         event_date=event["event_date"],
         event_time=event["event_time"],
         location=event["event_location"],
         event_id=event_id,
-        zebra_family_id=fam["zebra_customer_id"],
-        connection_id=fam["connection_id"]   # ⭐ חשוב
+        zebra_family_id=family_id
     )
 
 
-# =========================
-# submit → Sheets + Zebra
-# =========================
+# ========================
+# Submit
+# ========================
 @app.route("/submit", methods=["POST"])
 def submit():
-    data = request.json or {}
+    data = request.json
+    event_id = data["event_id"]
+    family_id = data["family_id"]
+    status = data["status"]
+    tickets = int(data["tickets"])
 
-    zebra_customer_id = str(data.get("family_id"))
-    connection_id = str(data.get("connection_id"))
-    event_id = str(data.get("event_id"))
-    status = data.get("status")
-    tickets = int(data.get("tickets", 0))
-
-    # --- Google Sheets ---
+    # ---- Google Sheets
     payload = {
         "timestamp": datetime.now().isoformat(),
         "event_id": event_id,
-        "family_id": zebra_customer_id,
+        "family_id": family_id,
         "status": status,
         "tickets": tickets,
         "ip": request.headers.get("X-Forwarded-For", request.remote_addr),
@@ -206,20 +202,15 @@ def submit():
 
     requests.post(GOOGLE_SHEETS_WEBAPP_URL, json=payload, timeout=10)
 
-    # --- Zebra ASKEV ---
-    zebra_resp = update_askev(
-        zebra_customer_id=zebra_customer_id,
-        connection_id=connection_id,
-        status=status,
-        qty=tickets
-    )
+    # ---- Zebra ASKEV
+    update_askev(family_id, event_id, status, tickets)
 
-    return jsonify({"success": True, "zebra": zebra_resp})
+    return jsonify({"success": True})
 
 
-# =========================
-# תודה
-# =========================
+# ========================
+# Thanks
+# ========================
 @app.route("/thanks")
 def thanks():
     return render_template(
@@ -229,12 +220,12 @@ def thanks():
     )
 
 
-# =========================
-# Health
-# =========================
+# ========================
+# Health check
+# ========================
 @app.route("/")
 def home():
-    return "OK – server is running!"
+    return "OK – server running"
 
 
 if __name__ == "__main__":
