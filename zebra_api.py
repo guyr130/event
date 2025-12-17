@@ -7,7 +7,6 @@ from datetime import datetime
 # =========================
 
 ZEBRA_UPDATE_URL = "https://25098.zebracrm.com/ext_interface.php?b=update_customer"
-
 ZEBRA_USER = "IVAPP"
 ZEBRA_PASS = "1q2w3e4r"
 
@@ -17,14 +16,12 @@ def update_zebra_attendance(
     event_id: int,
     status: str,   # "yes" / "no"
     qty: int
-):
+) -> bool:
     """
     Updates attendance data in Zebra CRM.
     """
 
-    # מיפוי סטטוס
     status_text = "אישרו" if status == "yes" else "ביטלו"
-
     today_str = datetime.now().strftime("%d/%m/%Y")
 
     xml_body = f"""<?xml version="1.0" encoding="utf-8"?>
@@ -39,6 +36,9 @@ def update_zebra_attendance(
     <IDENTIFIER>
         <ID>{family_id}</ID>
     </IDENTIFIER>
+
+    <!-- חובה גם אם ריק -->
+    <CUST_DETAILS></CUST_DETAILS>
 
     <CONNECTION_CARD_DETAILS>
         <UPDATE_EVEN_CONNECTED>1</UPDATE_EVEN_CONNECTED>
@@ -86,6 +86,6 @@ def update_zebra_attendance(
 
     except Exception as e:
         print(
-            f"[ZEBRA] ERROR | family={family_id} | event={event_id} | {e}"
+            f"[ZEBRA] EXCEPTION | family={family_id} | event={event_id} | {e}"
         )
         return False
