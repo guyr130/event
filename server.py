@@ -1,7 +1,7 @@
-from zebra_api import update_askev_attendance
 from flask import Flask, request, render_template, jsonify
 import requests
 import datetime
+from zebra_api import update_askev_attendance
 
 app = Flask(__name__)
 
@@ -39,21 +39,57 @@ def confirm():
 def submit():
     data = request.get_json()
 
+    event_id = int(data.get("event_id"))
+    family_id = int(data.get("family_id"))
+    status = data.get("status")        # yes / no
+    tickets = int(data.get("tickets"))
+
+    # =========================
+    # SEND TO GOOGLE SHEETS
+    # =========================
     payload = {
         "timestamp": datetime.datetime.now().isoformat(),
-        "event_id": data.get("event_id"),
-        "family_id": data.get("family_id"),
-        "status": data.get("status"),
-        "tickets": data.get("tickets"),
+        "event_id": event_id,
+        "family_id": family_id,
+        "status": status,
+        "tickets": tickets,
         "user_agent": request.headers.get("User-Agent"),
         "ip": request.remote_addr
     }
 
-    # ---- SEND TO GOOGLE SHEETS ----
     try:
         requests.post(GOOGLE_SHEET_WEBHOOK, json=payload, timeout=5)
     except Exception as e:
         print("Sheets error:", e)
+
+    # =========================
+    # PREPARE ZEBRA DATA
+    # =========================
+    today = datetime.datetime.now().strftime("%d/%m/%Y")
+
+    if status == "yes":
+        zebra_status = "אישרו"
+        arrived_qty = tickets
+    else:
+        zebra_status = "ביטלו"
+        arrived_qty = 0
+
+    # =========================
+    # SEND TO ZEBRA
+    # =========================
+    try:
+        code, zebra_response = update_askev_attendance(
+            family_id=family_id,
+            event_id=event_id,
+            status_text=zebra_status,
+            arrived_qty=arrived_qty,
+            approval_date=today
+        )
+        print("ZEBRA CODE:", code)
+        print("ZEBRA RESPONSE:", zebra_response)
+
+    except Exception as e:
+        print("Zebra error:", e)
 
     return jsonify({"ok": True})
 
