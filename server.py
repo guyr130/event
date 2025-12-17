@@ -33,7 +33,8 @@ def confirm():
 
 @app.route("/submit", methods=["POST"])
 def submit():
-    data = request.get_json(force=True)
+    data = request.get_json(silent=True) or request.form
+
 
     event_id = data.get("event_id")
     family_id = data.get("family_id")
