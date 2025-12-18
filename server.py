@@ -1,51 +1,89 @@
-from flask import Flask, request, jsonify
+from flask import Flask, request, jsonify, render_template
 import requests
+from datetime import datetime
 
 app = Flask(__name__)
 
+# ======================
+# CONFIG
+# ======================
+
+# Google Sheets – קיים ועובד
+GOOGLE_SHEETS_WEBAPP_URL = "PASTE_YOUR_GOOGLE_SHEETS_WEBAPP_URL_HERE"
+
+# Zebra UPDATE – זהה לפוסטמן
 ZEBRA_UPDATE_URL = "https://25098.zebracrm.com/ext_interface.php?b=update_customer"
 ZEBRA_USER = "IVAPP"
 ZEBRA_PASS = "1q2w3e4r"
 
 FIXED_DATE = "18/12/2025"
 
+# ======================
+# HEALTH
+# ======================
 @app.route("/")
 def home():
-    return """
-    <html lang="he" dir="rtl">
-    <body style="font-family:Arial;text-align:center;margin-top:50px">
-        <h2>בדיקת Zebra API</h2>
+    return "OK – server is running"
 
-        <button onclick="send('yes',2)">מגיעים (2)</button>
-        <br><br>
-        <button onclick="send('no',0)">לא מגיעים</button>
 
-        <script>
-        function send(status, qty) {
-            fetch('/test', {
-                method: 'POST',
-                headers: {'Content-Type':'application/json'},
-                body: JSON.stringify({
-                    family_id: 22055,
-                    event_id: 22354,
-                    status: status,
-                    tickets: qty
-                })
-            })
-            .then(r => r.text())
-            .then(t => alert(t));
-        }
-        </script>
-    </body>
-    </html>
-    """
+# ======================
+# CONFIRM PAGE (קיים)
+# ======================
+@app.route("/confirm")
+def confirm():
+    event_id = request.args.get("event_id")
+    family_id = request.args.get("family_id")
 
-@app.route("/test", methods=["POST"])
-def test():
-    data = request.json
+    if not event_id or not family_id:
+        return "Missing parameters", 400
 
-    zebra_status = "אישרו" if data["status"] == "yes" else "ביטלו"
-    zebra_tickets = data["tickets"] if data["status"] == "yes" else 0
+    return render_template(
+        "confirm.html",
+        event_id=event_id,
+        family_id=family_id
+    )
+
+
+# ======================
+# SUBMIT – כאן השילוב
+# ======================
+@app.route("/submit", methods=["POST"])
+def submit():
+    data = request.json or {}
+
+    event_id = data.get("event_id")
+    family_id = data.get("family_id")
+    status = data.get("status")        # yes / no
+    tickets = int(data.get("tickets", 0))
+
+    # ======================
+    # 1️⃣ GOOGLE SHEETS (לא נוגעים)
+    # ======================
+    sheet_payload = {
+        "timestamp": datetime.now().isoformat(),
+        "event_id": event_id,
+        "family_id": family_id,
+        "status": status,
+        "tickets": tickets,
+        "user_agent": request.headers.get("User-Agent", ""),
+        "ip": request.headers.get("X-Forwarded-For", request.remote_addr)
+    }
+
+    try:
+        r = requests.post(
+            GOOGLE_SHEETS_WEBAPP_URL,
+            json=sheet_payload,
+            timeout=10
+        )
+        print("Sheets OK:", r.status_code)
+    except Exception as e:
+        print("Sheets ERROR:", e)
+
+    # ======================
+    # 2️⃣ ZEBRA UPDATE (שתול)
+    # ======================
+    zebra_status = "אישרו" if status == "yes" else "ביטלו"
+    zebra_tickets = tickets if status == "yes" else 0
 
     zebra_xml = f"""<?xml version="1.0" encoding="utf-8"?>
 <ROOT>
@@ -57,7 +95,7 @@ def test():
     <CARD_TYPE>business_customer</CARD_TYPE>
 
     <IDENTIFIER>
-        <ID>{data["family_id"]}</ID>
+        <ID>{family_id}</ID>
     </IDENTIFIER>
 
     <CUST_DETAILS></CUST_DETAILS>
@@ -66,7 +104,7 @@ def test():
         <UPDATE_EVEN_CONNECTED>1</UPDATE_EVEN_CONNECTED>
         <CONNECTION_KEY>ASKEV</CONNECTION_KEY>
         <KEY>ID</KEY>
-        <VALUE>{data["event_id"]}</VALUE>
+        <VALUE>{event_id}</VALUE>
 
         <FIELDS>
             <A_C>{zebra_status}</A_C>
@@ -77,14 +115,22 @@ def test():
 </ROOT>
 """
 
-    r = requests.post(
-        ZEBRA_UPDATE_URL,
-        data=zebra_xml.encode("utf-8"),
-        headers={"Content-Type": "application/xml"},
-        timeout=10
-    )
+    try:
+        zr = requests.post(
+            ZEBRA_UPDATE_URL,
+            data=zebra_xml.encode("utf-8"),
+            headers={"Content-Type": "application/xml"},
+            timeout=10
+        )
+        print("Zebra response:", zr.text)
+    except Exception as e:
+        print("Zebra ERROR:", e)
 
-    return f"Zebra response:\n{r.text}"
+    return jsonify({"success": True})
 
+
+# ======================
+# RUN
+# ======================
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=10000)
