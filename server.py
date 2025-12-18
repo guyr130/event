@@ -1,143 +1,51 @@
-from flask import Flask, request, render_template, jsonify
+from flask import Flask, request, jsonify
 import requests
-import xml.etree.ElementTree as ET
-from datetime import datetime
 
 app = Flask(__name__)
 
-# ===== Zebra =====
-ZEBRA_GET_URL = "https://25098.zebracrm.com/ext_interface.php?b=get_multi_cards_details"
 ZEBRA_UPDATE_URL = "https://25098.zebracrm.com/ext_interface.php?b=update_customer"
-
 ZEBRA_USER = "IVAPP"
 ZEBRA_PASS = "1q2w3e4r"
 
-FIXED_DATE = "17/12/2025"
+FIXED_DATE = "18/12/2025"
 
-# ===== Google Sheets =====
-GOOGLE_SHEETS_WEBAPP_URL = "https://script.google.com/macros/s/AKfycbyK2wobbQUnN8hQ2HwL9sauJ4Nv8N3JpsRCdGGlrAY4KmEPnq2CUZFBaC_GZXJ7I3HT/exec"
+@app.route("/")
+def home():
+    return """
+    <html lang="he" dir="rtl">
+    <body style="font-family:Arial;text-align:center;margin-top:50px">
+        <h2>בדיקת Zebra API</h2>
 
+        <button onclick="send('yes',2)">מגיעים (2)</button>
+        <br><br>
+        <button onclick="send('no',0)">לא מגיעים</button>
 
-# =========================
-# שליפת אירוע – לא נוגעים
-# =========================
-def get_event_data(event_id):
-    xml_body = f"""
-<ROOT>
-    <PERMISSION>
-        <USERNAME>{ZEBRA_USER}</USERNAME>
-        <PASSWORD>{ZEBRA_PASS}</PASSWORD>
-    </PERMISSION>
-
-    <ID_FILTER>{event_id}</ID_FILTER>
-
-    <FIELDS>
-        <EV_N></EV_N>
-        <EV_D></EV_D>
-        <EVE_HOUR></EVE_HOUR>
-        <EVE_LOC></EVE_LOC>
-    </FIELDS>
-
-    <CONNECTION_CARDS>
-        <CONNECTION_CARD>
-            <CONNECTION_KEY>ASKEV</CONNECTION_KEY>
-            <FIELDS>
-                <ID></ID>
-                <CO_NAME></CO_NAME>
-            </FIELDS>
-            <CON_FIELDS>
-                <TOT_FFAM></TOT_FFAM>
-                <PROV></PROV>
-            </CON_FIELDS>
-        </CONNECTION_CARD>
-    </CONNECTION_CARDS>
-</ROOT>
-""".strip()
-
-    r = requests.post(
-        ZEBRA_GET_URL,
-        data=xml_body.encode("utf-8"),
-        headers={"Content-Type": "application/xml"}
-    )
-
-    tree = ET.fromstring(r.text)
-    card = tree.find(".//CARD")
-    if card is None:
-        return None
-
-    data = {
-        "event_name": card.findtext(".//EV_N", ""),
-        "event_date": card.findtext(".//EV_D", ""),
-        "event_time": card.findtext(".//EVE_HOUR", ""),
-        "event_location": card.findtext(".//EVE_LOC", ""),
-        "families": []
-    }
-
-    for el in card.findall(".//CONNECTIONS_CARDS/*"):
-        if el.tag.startswith("CARD_CONNECTION_"):
-            data["families"].append({
-                "id": el.findtext("ID"),
-                "family_name": el.findtext(".//CO_NAME"),
-                "tickets_approved": el.findtext(".//TOT_FFAM"),
-                "approved": el.findtext(".//PROV"),
+        <script>
+        function send(status, qty) {
+            fetch('/test', {
+                method: 'POST',
+                headers: {'Content-Type':'application/json'},
+                body: JSON.stringify({
+                    family_id: 22055,
+                    event_id: 22354,
+                    status: status,
+                    tickets: qty
+                })
             })
+            .then(r => r.text())
+            .then(t => alert(t));
+        }
+        </script>
+    </body>
+    </html>
+    """
 
-    return data
-
-
-# =========================
-# דף אישור
-# =========================
-@app.route("/confirm")
-def confirm():
-    event_id = request.args.get("event_id")
-    family_id = request.args.get("family_id")
-
-    event = get_event_data(event_id)
-    fam = next(f for f in event["families"] if f["id"] == family_id)
-
-    return render_template(
-        "confirm.html",
-        family_name=fam["family_name"],
-        tickets=int(fam["tickets_approved"]),
-        event_name=event["event_name"],
-        event_date=event["event_date"],
-        event_time=event["event_time"],
-        location=event["event_location"]
-    )
-
-
-# =========================
-# SUBMIT – כאן הלוגיקה שלך
-# =========================
-@app.route("/submit", methods=["POST"])
-def submit():
+@app.route("/test", methods=["POST"])
+def test():
     data = request.json
 
-    status = data.get("status")        # yes / no
-    tickets = int(data.get("tickets", 0))
-
-    # ----- Google Sheets -----
-    requests.post(
-        GOOGLE_SHEETS_WEBAPP_URL,
-        json={
-            "timestamp": datetime.now().isoformat(),
-            "event_id": data.get("event_id"),
-            "family_id": data.get("family_id"),
-            "status": status,
-            "tickets": tickets,
-            "ip": request.remote_addr
-        },
-        timeout=10
-    )
-
-    # ----- Zebra logic (שלך) -----
-    if status == "yes":
-        a_c = "אישרו"
-        no_arive = tickets
-    else:
-        a_c = "ביטלו"
-        no_arive = 0
+    zebra_status = "אישרו" if data["status"] == "yes" else "ביטלו"
+    zebra_tickets = data["tickets"] if data["status"] == "yes" else 0
 
     zebra_xml = f"""<?xml version="1.0" encoding="utf-8"?>
 <ROOT>
@@ -149,7 +57,7 @@ def submit():
     <CARD_TYPE>business_customer</CARD_TYPE>
 
     <IDENTIFIER>
-        <ID>{data.get("family_id")}</ID>
+        <ID>{data["family_id"]}</ID>
     </IDENTIFIER>
 
     <CUST_DETAILS></CUST_DETAILS>
@@ -158,12 +66,12 @@ def submit():
         <UPDATE_EVEN_CONNECTED>1</UPDATE_EVEN_CONNECTED>
         <CONNECTION_KEY>ASKEV</CONNECTION_KEY>
         <KEY>ID</KEY>
-        <VALUE>{data.get("event_id")}</VALUE>
+        <VALUE>{data["event_id"]}</VALUE>
 
         <FIELDS>
-            <A_C>{a_c}</A_C>
+            <A_C>{zebra_status}</A_C>
             <A_D>{FIXED_DATE}</A_D>
-            <NO_ARIVE>{no_arive}</NO_ARIVE>
+            <NO_ARIVE>{zebra_tickets}</NO_ARIVE>
         </FIELDS>
     </CONNECTION_CARD_DETAILS>
 </ROOT>
@@ -176,15 +84,7 @@ def submit():
         timeout=10
     )
 
-    print("Zebra:", r.text)
-
-    return jsonify({"success": True})
-
-
-@app.route("/")
-def home():
-    return "OK"
-
+    return f"Zebra response:\n{r.text}"
 
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=10000)
