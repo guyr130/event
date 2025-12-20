@@ -1,8 +1,88 @@
+# -*- coding: utf-8 -*-
+from flask import Flask, request, jsonify, render_template
+import requests
+from datetime import datetime
+import traceback
+
+app = Flask(__name__)
+
+# ======================
+# CONFIG
+# ======================
+
+GOOGLE_SHEETS_WEBAPP_URL = "PASTE_YOUR_GOOGLE_SHEETS_WEBAPP_URL_HERE"
+
+ZEBRA_UPDATE_URL = "https://25098.zebracrm.com/ext_interface.php?b=update_customer"
+ZEBRA_USER = "IVAPP"
+ZEBRA_PASS = "1q2w3e4r"
+
+FIXED_DATE = "20/12/2025"
+
+# ======================
+# HEALTH
+# ======================
+@app.route("/")
+def home():
+    return "OK – server is running"
+
+# ======================
+# CONFIRM PAGE
+# ======================
+@app.route("/confirm")
+def confirm():
+    event_id = request.args.get("event_id")
+    family_id = request.args.get("family_id")
+
+    if not event_id or not family_id:
+        return "Missing parameters", 400
+
+    return render_template(
+        "confirm.html",
+        event_id=event_id,
+        family_id=family_id
+    )
+
+# ======================
+# SUBMIT
+# ======================
+@app.route("/submit", methods=["POST"])
+def submit():
+    data = request.json or {}
+
+    event_id = data.get("event_id")
+    family_id = data.get("family_id")
+    status = data.get("status")          # yes / no
+    tickets = int(data.get("tickets", 0))
+
     # ======================
-    # 2️⃣ ZEBRA UPDATE (SAFE – לא שובר כלום)
+    # 1️⃣ GOOGLE SHEETS (עובד – לא נוגעים)
     # ======================
     try:
-        zebra_status = "אישרו" if status == "yes" else "ביטלו"
+        sheet_payload = {
+            "timestamp": datetime.now().isoformat(),
+            "event_id": event_id,
+            "family_id": family_id,
+            "status": status,
+            "tickets": tickets,
+            "user_agent": request.headers.get("User-Agent", ""),
+            "ip": request.headers.get("X-Forwarded-For", request.remote_addr)
+        }
+
+        requests.post(
+            GOOGLE_SHEETS_WEBAPP_URL,
+            json=sheet_payload,
+            timeout=10
+        )
+        print("✅ Sheets updated")
+
+    except Exception as e:
+        print("❌ Sheets ERROR:", e)
+
+    # ======================
+    # 2️⃣ ZEBRA UPDATE (מנותק מהזרימה!)
+    # ======================
+    try:
+        zebra_status = "אישרו" if status == "yes" else "ביטל"
         zebra_tickets = tickets if status == "yes" else 0
 
         zebra_xml = f"""<?xml version="1.0" encoding="utf-8"?>
@@ -42,9 +122,20 @@
             timeout=10
         )
 
-        print("Zebra status:", zr.status_code)
-        print("Zebra response:", zr.text)
+        print("🦓 Zebra status:", zr.status_code)
+        print(zr.text)
 
     except Exception as e:
-        # ❗ קריטי – לא זורקים חריגה
-        print("Zebra FAILED but flow continues:", e)
+        print("❌ Zebra ERROR – ממשיכים בלי להפיל מערכת")
+        traceback.print_exc()
+
+    # ======================
+    # תמיד מחזירים הצלחה
+    # ======================
+    return jsonify({"success": True})
+
+# ======================
+# RUN
+# ======================
+if __name__ == "__main__":
+    app.run(host="0.0.0.0", port=10000)
