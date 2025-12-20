@@ -8,7 +8,7 @@ app = Flask(__name__)
 # CONFIG
 # ======================
 
-GOOGLE_SHEETS_WEBAPP_URL = ""  # אפשר להשאיר ריק זמנית
+GOOGLE_SHEETS_WEBAPP_URL = ""  # להשאיר ריק אם לא פעיל
 
 ZEBRA_UPDATE_URL = "https://25098.zebracrm.com/ext_interface.php?b=update_customer"
 ZEBRA_USER = "IVAPP"
@@ -36,8 +36,8 @@ def confirm():
     if not event_id or not family_id:
         return "Missing parameters", 400
 
-    # ✅ ערך ברירת מחדל כדי ש-Jinja לא יקרוס
-    tickets = 5
+    # ⚠️ חשוב: tickets חייב להגיע ל-template
+    tickets = int(request.args.get("tickets", 5))  # ברירת מחדל בטוחה
 
     return render_template(
         "confirm.html",
@@ -56,11 +56,11 @@ def submit():
 
     event_id = data.get("event_id")
     family_id = data.get("family_id")
-    status = data.get("status")  # yes / no
+    status = data.get("status")        # yes / no
     tickets = int(data.get("tickets", 0))
 
     # ======================
-    # 1️⃣ GOOGLE SHEETS (לא חובה)
+    # 1️⃣ GOOGLE SHEETS (לא מפיל כלום)
     # ======================
     if GOOGLE_SHEETS_WEBAPP_URL:
         try:
@@ -73,18 +73,19 @@ def submit():
                     "status": status,
                     "tickets": tickets,
                 },
-                timeout=10
+                timeout=5
             )
         except Exception as e:
             print("Sheets ERROR:", e)
 
     # ======================
-    # 2️⃣ ZEBRA UPDATE
+    # 2️⃣ ZEBRA (BEST EFFORT)
     # ======================
-    zebra_status = "אישרו" if status == "yes" else "ביטל"
-    zebra_tickets = tickets if status == "yes" else 0
+    try:
+        zebra_status = "אישרו" if status == "yes" else "ביטלו"
+        zebra_tickets = tickets if status == "yes" else 0
 
-    zebra_xml = f"""<?xml version="1.0" encoding="utf-8"?>
+        zebra_xml = f"""<?xml version="1.0" encoding="utf-8"?>
 <ROOT>
     <PERMISSION>
         <USERNAME>{ZEBRA_USER}</USERNAME>
@@ -112,18 +113,21 @@ def submit():
 </ROOT>
 """
 
-    try:
-        zr = requests.post(
+        r = requests.post(
             ZEBRA_UPDATE_URL,
             data=zebra_xml.encode("utf-8"),
             headers={"Content-Type": "application/xml"},
-            timeout=10
+            timeout=5
         )
-        print("Zebra OK:", zr.text)
-    except Exception as e:
-        print("Zebra ERROR:", e)
+        print("Zebra OK:", r.text)
 
-    return jsonify({"success": True})
+    except Exception as e:
+        print("Zebra ERROR (ignored):", e)
+
+    # ======================
+    # 3️⃣ REDIRECT THANKS
+    # ======================
+    return redirect(url_for("thanks", status=status, qty=tickets))
 
 
 # ======================
@@ -132,7 +136,7 @@ def submit():
 @app.route("/thanks")
 def thanks():
     status = request.args.get("status")
-    qty = request.args.get("qty", "0")
+    qty = request.args.get("qty", 0)
     return f"תודה! סטטוס: {status}, כמות: {qty}"
 
 
