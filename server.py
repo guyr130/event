@@ -10,8 +10,10 @@ app = Flask(__name__)
 # CONFIG
 # ======================
 
+# Google Sheets – קיים ועובד
 GOOGLE_SHEETS_WEBAPP_URL = "PASTE_YOUR_GOOGLE_SHEETS_WEBAPP_URL_HERE"
 
+# Zebra UPDATE – בדיוק כמו Postman
 ZEBRA_UPDATE_URL = "https://25098.zebracrm.com/ext_interface.php?b=update_customer"
 ZEBRA_USER = "IVAPP"
 ZEBRA_PASS = "1q2w3e4r"
@@ -51,12 +53,12 @@ def submit():
 
     event_id = data.get("event_id")
     family_id = data.get("family_id")
-    status = data.get("status")          # yes / no
+    status = data.get("status")      # yes / no
     tickets = int(data.get("tickets", 0))
 
-    # ======================
-    # 1️⃣ GOOGLE SHEETS (עובד – לא נוגעים)
-    # ======================
+    # =====================================================
+    # 1️⃣ GOOGLE SHEETS – לא נוגעים
+    # =====================================================
     try:
         sheet_payload = {
             "timestamp": datetime.now().isoformat(),
@@ -73,14 +75,15 @@ def submit():
             json=sheet_payload,
             timeout=10
         )
-        print("✅ Sheets updated")
+        print("Sheets OK")
 
-    except Exception as e:
-        print("❌ Sheets ERROR:", e)
+    except Exception:
+        print("Sheets ERROR")
+        traceback.print_exc()
 
-    # ======================
-    # 2️⃣ ZEBRA UPDATE (מנותק מהזרימה!)
-    # ======================
+    # =====================================================
+    # 2️⃣ ZEBRA – מבודד לגמרי (לא מפיל מערכת)
+    # =====================================================
     try:
         zebra_status = "אישרו" if status == "yes" else "ביטל"
         zebra_tickets = tickets if status == "yes" else 0
@@ -122,16 +125,16 @@ def submit():
             timeout=10
         )
 
-        print("🦓 Zebra status:", zr.status_code)
+        print("Zebra HTTP:", zr.status_code)
         print(zr.text)
 
-    except Exception as e:
-        print("❌ Zebra ERROR – ממשיכים בלי להפיל מערכת")
+    except Exception:
+        print("Zebra ERROR – ignored")
         traceback.print_exc()
 
-    # ======================
-    # תמיד מחזירים הצלחה
-    # ======================
+    # =====================================================
+    # תמיד מחזיר הצלחה – לא שוברים UX
+    # =====================================================
     return jsonify({"success": True})
 
 # ======================
