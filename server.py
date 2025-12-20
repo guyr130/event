@@ -14,7 +14,8 @@ ZEBRA_UPDATE_URL = "https://25098.zebracrm.com/ext_interface.php?b=update_custom
 ZEBRA_USER = "IVAPP"
 ZEBRA_PASS = "1q2w3e4r"
 
-FIXED_DATE = "20/12/2025"
+FIXED_DATE = "18/12/2025"
+
 
 # ======================
 # HEALTH
@@ -35,17 +36,18 @@ def confirm():
     if not event_id or not family_id:
         return "Missing parameters", 400
 
-    # ⚠️ כרגע נתונים קבועים / זמניים
-    # בעתיד – יבואו מזברה
+    # ⚠️ קריטי – אחרת Jinja נופל
+    tickets = 5  # זמני / דיפולט – בדיוק כמו שהיה לפני הקריסה
+
     return render_template(
         "confirm.html",
         event_id=event_id,
         family_id=family_id,
-        family_name="משפחה לדוגמה",
-        tickets=4,
-        event_name="אירוע חנוכה",
-        event_date="20/12/2025",
-        location="ירושלים"
+        tickets=tickets,
+        family_name="",
+        event_name="",
+        event_date="",
+        location=""
     )
 
 
@@ -58,11 +60,11 @@ def submit():
 
     event_id = data.get("event_id")
     family_id = data.get("family_id")
-    status = data.get("status")   # yes / no
+    status = data.get("status")
     tickets = int(data.get("tickets", 0))
 
     # ======================
-    # 1️⃣ GOOGLE SHEETS (לא נוגעים)
+    # 1️⃣ Google Sheets – לא נוגעים
     # ======================
     try:
         requests.post(
@@ -74,62 +76,58 @@ def submit():
                 "status": status,
                 "tickets": tickets,
             },
-            timeout=10
+            timeout=5
         )
     except Exception as e:
         print("Sheets ERROR:", e)
 
     # ======================
-    # 2️⃣ ZEBRA UPDATE (מנותק מהזרימה)
+    # 2️⃣ Zebra – שתול, לא מפיל
     # ======================
-    try:
-        zebra_status = "אישרו" if status == "yes" else "ביטלו"
-        zebra_tickets = tickets if status == "yes" else 0
+    zebra_status = "אישרו" if status == "yes" else "ביטלו"
+    zebra_tickets = tickets if status == "yes" else 0
 
-        zebra_xml = f"""<?xml version="1.0" encoding="utf-8"?>
+    zebra_xml = f"""<?xml version="1.0" encoding="utf-8"?>
 <ROOT>
-    <PERMISSION>
-        <USERNAME>{ZEBRA_USER}</USERNAME>
-        <PASSWORD>{ZEBRA_PASS}</PASSWORD>
-    </PERMISSION>
+  <PERMISSION>
+    <USERNAME>{ZEBRA_USER}</USERNAME>
+    <PASSWORD>{ZEBRA_PASS}</PASSWORD>
+  </PERMISSION>
 
-    <CARD_TYPE>business_customer</CARD_TYPE>
+  <CARD_TYPE>business_customer</CARD_TYPE>
 
-    <IDENTIFIER>
-        <ID>{family_id}</ID>
-    </IDENTIFIER>
+  <IDENTIFIER>
+    <ID>{family_id}</ID>
+  </IDENTIFIER>
 
-    <CONNECTION_CARD_DETAILS>
-        <UPDATE_EVEN_CONNECTED>1</UPDATE_EVEN_CONNECTED>
-        <CONNECTION_KEY>ASKEV</CONNECTION_KEY>
-        <KEY>ID</KEY>
-        <VALUE>{event_id}</VALUE>
+  <CONNECTION_CARD_DETAILS>
+    <UPDATE_EVEN_CONNECTED>1</UPDATE_EVEN_CONNECTED>
+    <CONNECTION_KEY>ASKEV</CONNECTION_KEY>
+    <KEY>ID</KEY>
+    <VALUE>{event_id}</VALUE>
 
-        <FIELDS>
-            <A_C>{zebra_status}</A_C>
-            <A_D>{FIXED_DATE}</A_D>
-            <NO_ARIVE>{zebra_tickets}</NO_ARIVE>
-        </FIELDS>
-    </CONNECTION_CARD_DETAILS>
+    <FIELDS>
+      <A_C>{zebra_status}</A_C>
+      <A_D>{FIXED_DATE}</A_D>
+      <NO_ARIVE>{zebra_tickets}</NO_ARIVE>
+    </FIELDS>
+  </CONNECTION_CARD_DETAILS>
 </ROOT>
 """
 
+    try:
         r = requests.post(
             ZEBRA_UPDATE_URL,
             data=zebra_xml.encode("utf-8"),
             headers={"Content-Type": "application/xml"},
-            timeout=10
+            timeout=5
         )
         print("Zebra OK:", r.text)
-
     except Exception as e:
         print("Zebra ERROR:", e)
 
     return jsonify({"success": True})
 
 
-# ======================
-# RUN
-# ======================
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=10000)
