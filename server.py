@@ -13,14 +13,16 @@ ZEBRA_UPDATE_URL = "https://25098.zebracrm.com/ext_interface.php?b=update_custom
 ZEBRA_USER = "IVAPP"
 ZEBRA_PASS = "1q2w3e4r"
 
-FIXED_DATE = "20/12/2025"
+FIXED_DATE = "18/12/2025"
+
 
 # ======================
 # HEALTH
 # ======================
 @app.route("/")
 def home():
-    return "OK"
+    return "OK – server is running"
+
 
 # ======================
 # CONFIRM PAGE
@@ -33,11 +35,16 @@ def confirm():
     if not event_id or not family_id:
         return "Missing parameters", 400
 
+    # 🔑 חובה כדי למנוע 500
+    tickets = int(request.args.get("tickets", 1))
+
     return render_template(
         "confirm.html",
         event_id=event_id,
-        family_id=family_id
+        family_id=family_id,
+        tickets=tickets
     )
+
 
 # ======================
 # SUBMIT
@@ -48,40 +55,34 @@ def submit():
 
     event_id = data.get("event_id")
     family_id = data.get("family_id")
-    status = data.get("status")  # yes / no
-
-    try:
-        tickets = int(data.get("tickets", 0))
-    except:
-        tickets = 0
+    status = data.get("status")      # yes / no
+    tickets = int(data.get("tickets", 0))
 
     # ======================
-    # 1️⃣ GOOGLE SHEETS – קריטי
+    # 1️⃣ GOOGLE SHEETS
     # ======================
-    try:
-        sheet_payload = {
-            "timestamp": datetime.now().isoformat(),
-            "event_id": event_id,
-            "family_id": family_id,
-            "status": status,
-            "tickets": tickets,
-            "ip": request.headers.get("X-Forwarded-For", request.remote_addr)
-        }
+    sheet_payload = {
+        "timestamp": datetime.now().isoformat(),
+        "event_id": event_id,
+        "family_id": family_id,
+        "status": status,
+        "tickets": tickets
+    }
 
+    try:
         requests.post(
             GOOGLE_SHEETS_WEBAPP_URL,
             json=sheet_payload,
             timeout=10
         )
-
     except Exception as e:
-        print("❌ Sheets ERROR:", e)
+        print("Sheets ERROR:", e)
 
     # ======================
-    # 2️⃣ ZEBRA – מבודד לחלוטין
+    # 2️⃣ ZEBRA (לא משפיע על הזרימה)
     # ======================
     try:
-        zebra_status = "אישרו" if status == "yes" else "ביטל"
+        zebra_status = "אישרו" if status == "yes" else "ביטלו"
         zebra_tickets = tickets if status == "yes" else 0
 
         zebra_xml = f"""<?xml version="1.0" encoding="utf-8"?>
@@ -102,7 +103,6 @@ def submit():
     <CONNECTION_KEY>ASKEV</CONNECTION_KEY>
     <KEY>ID</KEY>
     <VALUE>{event_id}</VALUE>
-
     <FIELDS>
       <A_C>{zebra_status}</A_C>
       <A_D>{FIXED_DATE}</A_D>
@@ -111,23 +111,17 @@ def submit():
   </CONNECTION_CARD_DETAILS>
 </ROOT>
 """
-
-        zr = requests.post(
+        requests.post(
             ZEBRA_UPDATE_URL,
             data=zebra_xml.encode("utf-8"),
             headers={"Content-Type": "application/xml"},
             timeout=10
         )
-
-        print("✅ Zebra status:", zr.status_code)
-
     except Exception as e:
-        print("⚠️ Zebra ERROR (ignored):", e)
+        print("Zebra ERROR:", e)
 
-    # ======================
-    # תמיד מחזירים תשובה
-    # ======================
     return jsonify({"success": True})
+
 
 # ======================
 # RUN
