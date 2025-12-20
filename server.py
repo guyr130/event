@@ -1,14 +1,10 @@
-from flask import Flask, request, jsonify, render_template, redirect, url_for
+from flask import Flask, request, jsonify, render_template
 import requests
 from datetime import datetime
 
 app = Flask(__name__)
 
-# ======================
-# CONFIG
-# ======================
-
-GOOGLE_SHEETS_WEBAPP_URL = ""  # להשאיר ריק אם לא פעיל
+GOOGLE_SHEETS_WEBAPP_URL = "PASTE_YOUR_GOOGLE_SHEETS_WEBAPP_URL_HERE"
 
 ZEBRA_UPDATE_URL = "https://25098.zebracrm.com/ext_interface.php?b=update_customer"
 ZEBRA_USER = "IVAPP"
@@ -17,17 +13,11 @@ ZEBRA_PASS = "1q2w3e4r"
 FIXED_DATE = "20/12/2025"
 
 
-# ======================
-# HEALTH
-# ======================
 @app.route("/")
 def home():
     return "OK – server is running"
 
 
-# ======================
-# CONFIRM PAGE
-# ======================
 @app.route("/confirm")
 def confirm():
     event_id = request.args.get("event_id")
@@ -36,8 +26,7 @@ def confirm():
     if not event_id or not family_id:
         return "Missing parameters", 400
 
-    # ⚠️ חשוב: tickets חייב להגיע ל-template
-    tickets = int(request.args.get("tickets", 5))  # ברירת מחדל בטוחה
+    tickets = 5  # חשוב! אחרת ה־HTML קורס
 
     return render_template(
         "confirm.html",
@@ -47,45 +36,36 @@ def confirm():
     )
 
 
-# ======================
-# SUBMIT
-# ======================
 @app.route("/submit", methods=["POST"])
 def submit():
     data = request.json or {}
 
     event_id = data.get("event_id")
     family_id = data.get("family_id")
-    status = data.get("status")        # yes / no
+    status = data.get("status")
     tickets = int(data.get("tickets", 0))
 
-    # ======================
-    # 1️⃣ GOOGLE SHEETS (לא מפיל כלום)
-    # ======================
-    if GOOGLE_SHEETS_WEBAPP_URL:
-        try:
-            requests.post(
-                GOOGLE_SHEETS_WEBAPP_URL,
-                json={
-                    "timestamp": datetime.now().isoformat(),
-                    "event_id": event_id,
-                    "family_id": family_id,
-                    "status": status,
-                    "tickets": tickets,
-                },
-                timeout=5
-            )
-        except Exception as e:
-            print("Sheets ERROR:", e)
-
-    # ======================
-    # 2️⃣ ZEBRA (BEST EFFORT)
-    # ======================
+    # --- Google Sheets (לא עוצר כלום) ---
     try:
-        zebra_status = "אישרו" if status == "yes" else "ביטלו"
-        zebra_tickets = tickets if status == "yes" else 0
+        requests.post(
+            GOOGLE_SHEETS_WEBAPP_URL,
+            json={
+                "timestamp": datetime.now().isoformat(),
+                "event_id": event_id,
+                "family_id": family_id,
+                "status": status,
+                "tickets": tickets,
+            },
+            timeout=10
+        )
+    except Exception as e:
+        print("Sheets ERROR:", e)
 
-        zebra_xml = f"""<?xml version="1.0" encoding="utf-8"?>
+    # --- Zebra ---
+    zebra_status = "אישרו" if status == "yes" else "ביטלו"
+    zebra_tickets = tickets if status == "yes" else 0
+
+    zebra_xml = f"""<?xml version="1.0" encoding="utf-8"?>
 <ROOT>
     <PERMISSION>
         <USERNAME>{ZEBRA_USER}</USERNAME>
@@ -113,35 +93,19 @@ def submit():
 </ROOT>
 """
 
+    try:
         r = requests.post(
             ZEBRA_UPDATE_URL,
             data=zebra_xml.encode("utf-8"),
             headers={"Content-Type": "application/xml"},
-            timeout=5
+            timeout=10
         )
-        print("Zebra OK:", r.text)
-
+        print("Zebra:", r.text)
     except Exception as e:
-        print("Zebra ERROR (ignored):", e)
+        print("Zebra ERROR:", e)
 
-    # ======================
-    # 3️⃣ REDIRECT THANKS
-    # ======================
-    return redirect(url_for("thanks", status=status, qty=tickets))
+    return jsonify({"success": True})
 
 
-# ======================
-# THANK YOU PAGE
-# ======================
-@app.route("/thanks")
-def thanks():
-    status = request.args.get("status")
-    qty = request.args.get("qty", 0)
-    return f"תודה! סטטוס: {status}, כמות: {qty}"
-
-
-# ======================
-# RUN
-# ======================
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=10000)
