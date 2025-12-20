@@ -1,8 +1,6 @@
-# -*- coding: utf-8 -*-
 from flask import Flask, request, jsonify, render_template
 import requests
 from datetime import datetime
-import traceback
 
 app = Flask(__name__)
 
@@ -10,15 +8,13 @@ app = Flask(__name__)
 # CONFIG
 # ======================
 
-# Google Sheets – קיים ועובד
 GOOGLE_SHEETS_WEBAPP_URL = "PASTE_YOUR_GOOGLE_SHEETS_WEBAPP_URL_HERE"
 
-# Zebra UPDATE – בדיוק כמו Postman
 ZEBRA_UPDATE_URL = "https://25098.zebracrm.com/ext_interface.php?b=update_customer"
 ZEBRA_USER = "IVAPP"
 ZEBRA_PASS = "1q2w3e4r"
 
-FIXED_DATE = "20/12/2025"
+FIXED_DATE = "18/12/2025"
 
 # ======================
 # HEALTH
@@ -26,6 +22,7 @@ FIXED_DATE = "20/12/2025"
 @app.route("/")
 def home():
     return "OK – server is running"
+
 
 # ======================
 # CONFIRM PAGE
@@ -44,6 +41,7 @@ def confirm():
         family_id=family_id
     )
 
+
 # ======================
 # SUBMIT
 # ======================
@@ -53,37 +51,39 @@ def submit():
 
     event_id = data.get("event_id")
     family_id = data.get("family_id")
-    status = data.get("status")      # yes / no
+    status = data.get("status")        # yes / no
     tickets = int(data.get("tickets", 0))
 
-    # =====================================================
-    # 1️⃣ GOOGLE SHEETS – לא נוגעים
-    # =====================================================
-    try:
-        sheet_payload = {
-            "timestamp": datetime.now().isoformat(),
-            "event_id": event_id,
-            "family_id": family_id,
-            "status": status,
-            "tickets": tickets,
-            "user_agent": request.headers.get("User-Agent", ""),
-            "ip": request.headers.get("X-Forwarded-For", request.remote_addr)
-        }
+    # ======================
+    # 1️⃣ GOOGLE SHEETS (לא נוגעים)
+    # ======================
+    sheet_payload = {
+        "timestamp": datetime.now().isoformat(),
+        "event_id": event_id,
+        "family_id": family_id,
+        "status": status,
+        "tickets": tickets,
+        "user_agent": request.headers.get("User-Agent", ""),
+        "ip": request.headers.get("X-Forwarded-For", request.remote_addr)
+    }
 
+    try:
         requests.post(
             GOOGLE_SHEETS_WEBAPP_URL,
             json=sheet_payload,
             timeout=10
         )
-        print("Sheets OK")
+    except Exception as e:
+        print("Sheets ERROR:", e)
 
-    except Exception:
-        print("Sheets ERROR")
-        traceback.print_exc()
+    # ======================
+    # 2️⃣ החזרת תשובה ללקוח – תמיד!
+    # ======================
+    response = jsonify({"success": True})
 
-    # =====================================================
-    # 2️⃣ ZEBRA – מבודד לגמרי (לא מפיל מערכת)
-    # =====================================================
+    # ======================
+    # 3️⃣ ZEBRA UPDATE (מבודד לחלוטין)
+    # ======================
     try:
         zebra_status = "אישרו" if status == "yes" else "ביטל"
         zebra_tickets = tickets if status == "yes" else 0
@@ -100,8 +100,6 @@ def submit():
     <IDENTIFIER>
         <ID>{family_id}</ID>
     </IDENTIFIER>
-
-    <CUST_DETAILS></CUST_DETAILS>
 
     <CONNECTION_CARD_DETAILS>
         <UPDATE_EVEN_CONNECTED>1</UPDATE_EVEN_CONNECTED>
@@ -125,17 +123,14 @@ def submit():
             timeout=10
         )
 
-        print("Zebra HTTP:", zr.status_code)
-        print(zr.text)
+        print("Zebra status:", zr.status_code)
+        print("Zebra response:", zr.text)
 
-    except Exception:
-        print("Zebra ERROR – ignored")
-        traceback.print_exc()
+    except Exception as e:
+        print("Zebra ERROR (ignored):", e)
 
-    # =====================================================
-    # תמיד מחזיר הצלחה – לא שוברים UX
-    # =====================================================
-    return jsonify({"success": True})
+    return response
+
 
 # ======================
 # RUN
