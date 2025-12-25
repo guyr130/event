@@ -7,7 +7,7 @@ from datetime import datetime
 app = Flask(__name__)
 
 # ======================
-# CONFIG (ENV מומלץ)
+# CONFIG
 # ======================
 GOOGLE_SHEETS_WEBAPP_URL = os.getenv("GOOGLE_SHEETS_WEBAPP_URL", "").strip()
 
@@ -19,8 +19,13 @@ ZEBRA_UPDATE_URL = os.getenv(
 ZEBRA_USER = os.getenv("ZEBRA_USER", "IVAPP").strip()
 ZEBRA_PASS = os.getenv("ZEBRA_PASS", "1q2w3e4r").strip()
 
-# אם אתה רוצה תאריך קבוע:
+# תאריך קבוע (כמו שעבד קודם)
 FIXED_DATE = os.getenv("FIXED_DATE", "20/12/2025").strip()
+
+# ======================
+# 🔒 EVENT ID – שינוי יחיד
+# ======================
+EVENT_ID = "22459"
 
 # ======================
 # HELPERS
@@ -33,10 +38,6 @@ def safe_int(v, default=0) -> int:
 
 
 def post_to_google_sheets(payload: dict) -> tuple[bool, str]:
-    """
-    לא מפיל את השרת לעולם.
-    מחזיר (ok, msg)
-    """
     if not GOOGLE_SHEETS_WEBAPP_URL or "PASTE_YOUR" in GOOGLE_SHEETS_WEBAPP_URL:
         return False, "GOOGLE_SHEETS_WEBAPP_URL not configured"
 
@@ -48,11 +49,6 @@ def post_to_google_sheets(payload: dict) -> tuple[bool, str]:
 
 
 def post_to_zebra_update(event_id: str, family_id: str, status: str, tickets: int) -> tuple[bool, str]:
-    """
-    שולח בדיוק Raw XML כמו בפוסטמן.
-    לא מפיל את השרת לעולם.
-    מחזיר (ok, response_text)
-    """
     zebra_status = "אישרו" if status == "yes" else "ביטל"
     zebra_tickets = tickets if status == "yes" else 0
 
@@ -90,7 +86,7 @@ def post_to_zebra_update(event_id: str, family_id: str, status: str, tickets: in
     try:
         zr = requests.post(
             ZEBRA_UPDATE_URL,
-            data=zebra_xml,  # חשוב: לשלוח STRING Raw כמו Postman
+            data=zebra_xml,
             headers={"Content-Type": "text/xml; charset=utf-8"},
             timeout=15
         )
@@ -100,39 +96,31 @@ def post_to_zebra_update(event_id: str, family_id: str, status: str, tickets: in
 
 
 # ======================
-# HEALTH
+# ROUTES
 # ======================
 @app.route("/")
 def home():
     return "OK – server is running"
 
 
-# ======================
-# CONFIRM PAGE
-# ======================
 @app.route("/confirm")
 def confirm():
-    event_id = request.args.get("event_id", "").strip()
     family_id = request.args.get("family_id", "").strip()
-
-    if not event_id or not family_id:
+    if not family_id:
         return "Missing parameters", 400
 
-    # כאן אתה אמרת ששליפה מזברה כבר עובדת אצלך.
-    # כדי לא לשבור כלום, שמתי DEFAULTים בטוחים:
     family_name = request.args.get("family_name", "משפחה").strip() or "משפחה"
     event_name = request.args.get("event_name", "אירוע").strip() or "אירוע"
     event_date = request.args.get("event_date", FIXED_DATE).strip() or FIXED_DATE
     location = request.args.get("location", "").strip()
 
-    # הכי חשוב: tickets תמיד מוגדר כדי למנוע 500 של Jinja
     tickets = safe_int(request.args.get("tickets", "2"), default=2)
     if tickets < 1:
         tickets = 1
 
     return render_template(
         "confirm.html",
-        event_id=event_id,
+        event_id=EVENT_ID,
         family_id=family_id,
         family_name=family_name,
         event_name=event_name,
@@ -142,34 +130,18 @@ def confirm():
     )
 
 
-# ======================
-# THANKS (כדי שלא יהיה 404)
-# ======================
-@app.route("/thanks")
-def thanks():
-    status = request.args.get("status", "")
-    qty = request.args.get("qty", "0")
-    if status == "yes":
-        return f"✅ אישורכם נקלט. כמות: {qty}"
-    return "✅ העדכון נקלט. נתראה באירועים אחרים."
-
-
-# ======================
-# SUBMIT – משאיר את המערכת יציבה
-# ======================
 @app.route("/submit", methods=["POST"])
 def submit():
     data = request.json or {}
 
-    event_id = str(data.get("event_id", "")).strip()
     family_id = str(data.get("family_id", "")).strip()
-    status = str(data.get("status", "")).strip()  # yes / no
+    status = str(data.get("status", "")).strip()
     tickets = safe_int(data.get("tickets", 0), default=0)
 
-    # ===== 1) GOOGLE SHEETS (לא מפיל אף פעם) =====
+    # ===== GOOGLE SHEETS =====
     sheet_payload = {
         "timestamp": datetime.now().isoformat(),
-        "event_id": event_id,
+        "event_id": EVENT_ID,
         "family_id": family_id,
         "status": status,
         "tickets": tickets,
@@ -180,21 +152,17 @@ def submit():
     sheets_ok, sheets_msg = post_to_google_sheets(sheet_payload)
     print("Sheets:", sheets_ok, sheets_msg)
 
-    # ===== 2) ZEBRA UPDATE (לא מפיל אף פעם) =====
-    zebra_ok, zebra_resp = post_to_zebra_update(event_id, family_id, status, tickets)
+    # ===== ZEBRA =====
+    zebra_ok, zebra_resp = post_to_zebra_update(EVENT_ID, family_id, status, tickets)
     print("Zebra:", zebra_ok, zebra_resp)
 
-    # לא משנה מה קרה בזברה/שיט — לא נופלים ולא שוברים את ה-UI
     return jsonify({
         "success": True,
         "sheets_ok": sheets_ok,
         "zebra_ok": zebra_ok,
-        "zebra_raw": zebra_resp[:5000]  # כדי שתראה בלוג/בדיבאג
+        "zebra_raw": zebra_resp[:5000]
     })
 
 
-# ======================
-# RUN (לוקאלי)
-# ======================
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=10000, debug=True)
