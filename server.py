@@ -15,14 +15,17 @@ ZEBRA_UPDATE_URL = "https://25098.zebracrm.com/ext_interface.php?b=update_custom
 ZEBRA_USER = "IVAPP"
 ZEBRA_PASS = "1q2w3e4r"
 
-FIXED_DATE = "20/12/2025"   # זמני – כמו שסיכמנו
-FIXED_TIME = "08:00"        # זמני עד תיקון זברה
+FIXED_DATE = "20/12/2025"   # זמני
+FIXED_TIME = "08:00"        # זמני
 
 # ======================
-# GOOGLE SHEETS
+# GOOGLE SHEETS (✔ מוכן)
 # ======================
-GOOGLE_SHEETS_WEBAPP_URL = "PASTE_YOUR_GOOGLE_SHEETS_URL_HERE"
-
+GOOGLE_SHEETS_WEBAPP_URL = (
+    "https://script.google.com/macros/s/"
+    "AKfycbyK2wobbQUnN8hQ2HwL9sauJ4Nv8N3JpsRCdGGlrAY4KmEPnq2CUZFBaC_GZXJ7I3HT"
+    "/exec"
+)
 
 # ======================
 # GET EVENT DATA (ZEBRA)
@@ -90,7 +93,6 @@ def get_event_data(event_id: str):
 
     return event
 
-
 # ======================
 # CONFIRM PAGE
 # ======================
@@ -120,7 +122,6 @@ def confirm():
         event_date=event["event_date"],
         location=event["location"]
     )
-
 
 # ======================
 # SUBMIT
@@ -185,16 +186,23 @@ def submit():
 </ROOT>
 """
 
-    r = requests.post(
+    requests.post(
         ZEBRA_UPDATE_URL,
         data=zebra_xml.encode("utf-8"),
         headers={"Content-Type": "application/xml"},
         timeout=15
     )
 
-    print("Zebra:", r.text)
     return jsonify({"success": True})
 
+# ======================
+# THANKS PAGE
+# ======================
+@app.route("/thanks")
+def thanks():
+    status = request.args.get("status")
+    qty = request.args.get("qty", "0")
+    return render_template("thanks.html", status=status, qty=qty)
 
 # ======================
 # HEALTH
@@ -202,7 +210,6 @@ def submit():
 @app.route("/")
 def home():
     return "OK – server is running"
-
 
 # ======================
 # RUN
