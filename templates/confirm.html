@@ -17,18 +17,22 @@
 
 <div style="max-width:420px; margin:0 auto; padding:20px;">
 
+    <!-- לוגו -->
     <img
         src="https://www.or4family.org.il/wp-content/uploads/2025/11/logo-1.png"
         alt="לוגו אור למשפחות"
         style="display:block; width:100%; max-width:260px; margin:0 auto 24px auto;"
     >
 
+    <!-- כותרת -->
     <h1 style="color:#0b5fa5;">אישור הגעה</h1>
 
+    <!-- טקסט משפחה -->
     <p style="font-size:18px;">
         משפחת <strong>{{ family_name }}</strong> היקרה,
     </p>
 
+    <!-- פרטי אירוע -->
     <p style="font-size:17px; line-height:1.6;">
         אושרו לכם <strong>{{ tickets }}</strong> כרטיסים לאירוע<br>
         <strong>{{ event_name }}</strong><br>
@@ -37,6 +41,7 @@
         במקום {{ location }}
     </p>
 
+    <!-- בחירת כמות -->
     <p style="margin-top:20px;">בחרו כמות:</p>
 
     <select id="qty" style="
@@ -53,13 +58,14 @@
         {% endfor %}
     </select>
 
+    <!-- כפתורים -->
     <div>
         <button onclick="sendResponse('yes')" style="
             width:220px;
             padding:14px;
             font-size:16px;
             background:#0b5fa5;
-            color:#fff;
+            color:#ffffff;
             border:none;
             border-radius:6px;
             margin-bottom:12px;
@@ -75,7 +81,7 @@
             padding:14px;
             font-size:16px;
             background:#f28c28;
-            color:#fff;
+            color:#ffffff;
             border:none;
             border-radius:6px;
             cursor:pointer;
@@ -83,6 +89,7 @@
             לא מגיעים
         </button>
     </div>
+
 </div>
 
 <script>
