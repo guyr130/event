@@ -26,6 +26,20 @@
         <h2 style="color:#0b5fa5;">אישורכם נקלט 💙</h2>
         <p>נרשמה הגעה עבור <strong>{{ qty }}</strong> משתתפים</p>
         <p>נתראה באירוע</p>
+
+        <!-- ===== QR לעמדת רישום ===== -->
+        <div style="margin-top:30px;">
+            <p style="font-size:16px; margin-bottom:10px;">
+                הציגו קוד זה בעמדת הרישום
+            </p>
+
+            <img
+                src="{{ qr_url }}"
+                alt="QR לרישום"
+                style="width:200px; height:200px;"
+            >
+        </div>
+
     {% else %}
         <h2 style="color:#f28c28;">העדכון נקלט</h2>
         <p>מצטערים שלא תגיעו</p>
