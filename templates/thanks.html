@@ -1,52 +1,17 @@
-<!DOCTYPE html>
-<html lang="he">
-<head>
-    <meta charset="UTF-8">
-    <title>תודה</title>
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-</head>
+@app.route("/thanks")
+def thanks():
+    status = request.args.get("status", "")
+    qty = request.args.get("qty", "0")
 
-<body style="
-    margin:0;
-    padding:0;
-    font-family: Arial, Helvetica, sans-serif;
-    direction: rtl;
-    text-align: center;
-    background: #ffffff;
-">
+    # QR בדיקה – זמני
+    qr_url = (
+        "https://api.qrserver.com/v1/create-qr-code/"
+        "?size=200x200&data=TEST-QR-123"
+    )
 
-<div style="max-width:420px; margin:0 auto; padding:20px;">
-
-    <img
-        src="https://www.or4family.org.il/wp-content/uploads/2025/11/logo-1.png"
-        style="width:200px; margin-bottom:20px;"
-    >
-
-    {% if status == "yes" %}
-        <h2 style="color:#0b5fa5;">אישורכם נקלט 💙</h2>
-        <p>נרשמה הגעה עבור <strong>{{ qty }}</strong> משתתפים</p>
-        <p>נתראה באירוע</p>
-
-        <!-- ===== QR לעמדת רישום ===== -->
-        <div style="margin-top:30px;">
-            <p style="font-size:16px; margin-bottom:10px;">
-                הציגו קוד זה בעמדת הרישום
-            </p>
-
-            <img
-                src="{{ qr_url }}"
-                alt="QR לרישום"
-                style="width:200px; height:200px;"
-            >
-        </div>
-
-    {% else %}
-        <h2 style="color:#f28c28;">העדכון נקלט</h2>
-        <p>מצטערים שלא תגיעו</p>
-        <p>נתראה באירועים אחרים</p>
-    {% endif %}
-
-</div>
-
-</body>
-</html>
+    return render_template(
+        "thanks.html",
+        status=status,
+        qty=qty,
+        qr_url=qr_url
+    )
