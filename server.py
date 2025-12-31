@@ -16,10 +16,10 @@ ZEBRA_USER = "IVAPP"
 ZEBRA_PASS = "1q2w3e4r"
 
 FIXED_DATE = "20/12/2025"   # זמני
-FIXED_TIME = "08:00"        # זמני
+FIXED_TIME = "08:00"        # fallback בלבד (אם משום מה לא חוזר מה-API)
 
 # ======================
-# GOOGLE SHEETS (✔ מוכן)
+# GOOGLE SHEETS
 # ======================
 GOOGLE_SHEETS_WEBAPP_URL = (
     "https://script.google.com/macros/s/"
@@ -43,6 +43,7 @@ def get_event_data(event_id: str):
     <FIELDS>
         <EV_N></EV_N>
         <EV_D></EV_D>
+        <EVE_HOUR></EVE_HOUR>
         <EVE_LOC></EVE_LOC>
     </FIELDS>
 
@@ -77,7 +78,7 @@ def get_event_data(event_id: str):
     event = {
         "event_name": card.findtext(".//EV_N", "").strip(),
         "event_date": card.findtext(".//EV_D", "").strip() or FIXED_DATE,
-        "event_time": FIXED_TIME,
+        "event_time": card.findtext(".//EVE_HOUR", "").strip() or FIXED_TIME,
         "location": card.findtext(".//EVE_LOC", "").strip(),
         "families": []
     }
@@ -120,6 +121,7 @@ def confirm():
         tickets=family["tickets"],
         event_name=event["event_name"],
         event_date=event["event_date"],
+        event_time=event["event_time"],
         location=event["location"]
     )
 
