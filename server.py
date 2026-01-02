@@ -20,11 +20,11 @@ FIXED_DATE = "20/12/2025"
 FIXED_TIME = "08:00"
 
 # ======================
-# GOOGLE SHEETS
+# GOOGLE SHEETS – URL נכון
 # ======================
 GOOGLE_SHEETS_WEBAPP_URL = (
     "https://script.google.com/macros/s/"
-    "AKfycbyK2wobbQUnN8hQ2HwL9sauJ4Nv8N3JpsRCdGGlrAY4KmEPnq2CUZFBaC_GZXJ7I3HT"
+    "AKfycby-I7NCgTMdW23Z28dCXi38ZGkn80oiLIqzfl1HXnweYIt7mowFypweK7lm2RNmSCHR"
     "/exec"
 )
 
@@ -153,7 +153,7 @@ def submit():
     try:
         r = requests.post(
             GOOGLE_SHEETS_WEBAPP_URL,
-            data=json.dumps(sheets_payload),              # 🔴 שינוי קריטי
+            data=json.dumps(sheets_payload),
             headers={"Content-Type": "application/json"},
             timeout=10
         )
