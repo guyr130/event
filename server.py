@@ -3,6 +3,7 @@ from flask import Flask, request, render_template, jsonify
 import requests
 import xml.etree.ElementTree as ET
 from datetime import datetime
+import json
 
 app = Flask(__name__)
 
@@ -15,8 +16,8 @@ ZEBRA_UPDATE_URL = "https://25098.zebracrm.com/ext_interface.php?b=update_custom
 ZEBRA_USER = "IVAPP"
 ZEBRA_PASS = "1q2w3e4r"
 
-FIXED_DATE = "20/12/2025"   # זמני
-FIXED_TIME = "08:00"        # fallback בלבד (אם משום מה לא חוזר מה-API)
+FIXED_DATE = "20/12/2025"
+FIXED_TIME = "08:00"
 
 # ======================
 # GOOGLE SHEETS
@@ -137,20 +138,27 @@ def submit():
     status = data.get("status")
     tickets = int(data.get("tickets", 0))
 
+    print("=== SUBMIT ===", event_id, family_id, status, tickets)
+
     # ===== Google Sheets =====
+    sheets_payload = {
+        "timestamp": datetime.now().isoformat(),
+        "event_id": event_id,
+        "family_id": family_id,
+        "status": status,
+        "tickets": tickets,
+        "ip": request.remote_addr
+    }
+
     try:
-        requests.post(
+        r = requests.post(
             GOOGLE_SHEETS_WEBAPP_URL,
-            json={
-                "timestamp": datetime.now().isoformat(),
-                "event_id": event_id,
-                "family_id": family_id,
-                "status": status,
-                "tickets": tickets,
-                "ip": request.remote_addr
-            },
+            data=json.dumps(sheets_payload),              # 🔴 שינוי קריטי
+            headers={"Content-Type": "application/json"},
             timeout=10
         )
+        print("GOOGLE STATUS:", r.status_code)
+        print("GOOGLE BODY:", r.text)
     except Exception as e:
         print("Sheets error:", e)
 
@@ -188,12 +196,16 @@ def submit():
 </ROOT>
 """
 
-    requests.post(
-        ZEBRA_UPDATE_URL,
-        data=zebra_xml.encode("utf-8"),
-        headers={"Content-Type": "application/xml"},
-        timeout=15
-    )
+    try:
+        z = requests.post(
+            ZEBRA_UPDATE_URL,
+            data=zebra_xml.encode("utf-8"),
+            headers={"Content-Type": "application/xml"},
+            timeout=15
+        )
+        print("ZEBRA STATUS:", z.status_code)
+    except Exception as e:
+        print("Zebra error:", e)
 
     return jsonify({"success": True})
 
