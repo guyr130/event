@@ -22,7 +22,7 @@ FIXED_TIME = "08:00"
 # ======================
 # GOOGLE APPS SCRIPT – URL נכון (בלי רווח!)
 # ======================
-GOOGLE_SHEETS_WEBAPP_URL = "https://script.google.com/macros/s/AKfycbz2kxPIhhQjN1hrfyIHw_1GnVOtefzrYcCWk-nXob08ALVJMTVFet2jOwq-dlJoDnXWCw/exec"
+GOOGLE_SHEETS_WEBAPP_URL = "https://script.google.com/macros/s/AKfycbzzUUJyXTKVjciUoB4qB7wylH8v4fv0PTXUzUeAt-P9GKs6oMiPsvO2_ZK5_We_FGq9/exec"
 
 # ======================
 # GET EVENT DATA (ZEBRA)
