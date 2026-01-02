@@ -20,11 +20,9 @@ FIXED_DATE = "20/12/2025"
 FIXED_TIME = "08:00"
 
 # ======================
-# GOOGLE SHEETS – URL נכון
+# GOOGLE APPS SCRIPT – URL נכון (בלי רווח!)
 # ======================
-GOOGLE_SHEETS_WEBAPP_URL = (
-" https://script.google.com/macros/s/AKfycbz2kxPIhhQjN1hrfyIHw_1GnVOtefzrYcCWk-nXob08ALVJMTVFet2jOwq-dlJoDnXWCw/exec"
-)
+GOOGLE_SHEETS_WEBAPP_URL = "https://script.google.com/macros/s/AKfycbz2kxPIhhQjN1hrfyIHw_1GnVOtefzrYcCWk-nXob08ALVJMTVFet2jOwq-dlJoDnXWCw/exec"
 
 # ======================
 # GET EVENT DATA (ZEBRA)
@@ -138,7 +136,7 @@ def submit():
 
     print("=== SUBMIT ===", event_id, family_id, status, tickets)
 
-    # ===== Google Sheets =====
+    # ===== Google Apps Script =====
     sheets_payload = {
         "timestamp": datetime.now().isoformat(),
         "event_id": event_id,
@@ -151,8 +149,8 @@ def submit():
     try:
         r = requests.post(
             GOOGLE_SHEETS_WEBAPP_URL,
-            data=json.dumps(sheets_payload),
             headers={"Content-Type": "application/json"},
+            data=json.dumps(sheets_payload),
             timeout=10
         )
         print("GOOGLE STATUS:", r.status_code)
@@ -176,8 +174,6 @@ def submit():
     <IDENTIFIER>
         <ID>{family_id}</ID>
     </IDENTIFIER>
-
-    <CUST_DETAILS></CUST_DETAILS>
 
     <CONNECTION_CARD_DETAILS>
         <UPDATE_EVEN_CONNECTED>1</UPDATE_EVEN_CONNECTED>
