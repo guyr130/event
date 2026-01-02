@@ -23,7 +23,7 @@ FIXED_TIME = "08:00"
 # GOOGLE SHEETS – URL נכון
 # ======================
 GOOGLE_SHEETS_WEBAPP_URL = (
-" https://script.google.com/macros/s/AKfycbzqLPxyKw_U33nqQeIz2c9mWPFH4MPHR2YiK4Koir5wJC6ESZfa6A19C-hQb-57w_Y/exec"
+" https://script.google.com/macros/s/AKfycbz2kxPIhhQjN1hrfyIHw_1GnVOtefzrYcCWk-nXob08ALVJMTVFet2jOwq-dlJoDnXWCw/exec"
 )
 
 # ======================
