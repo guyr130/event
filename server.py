@@ -4,6 +4,7 @@ import requests
 import xml.etree.ElementTree as ET
 from datetime import datetime
 import json
+import time
 
 app = Flask(__name__)
 
@@ -20,9 +21,32 @@ FIXED_DATE = "20/12/2025"
 FIXED_TIME = "08:00"
 
 # ======================
-# GOOGLE APPS SCRIPT – URL נכון (בלי רווח!)
+# GOOGLE APPS SCRIPT
 # ======================
 GOOGLE_SHEETS_WEBAPP_URL = "https://script.google.com/macros/s/AKfycbylZEMnARMNW-HH98Y8dtRpA9HLi9KZXK5LsRl_KApfxv7V2TgtRjGvBwWSq-OCrtdq/exec"
+
+# ======================
+# MEMORY FOR IDEMPOTENCY
+# ======================
+recent_requests = {}
+IDEMPOTENCY_WINDOW = 15  # seconds
+
+
+def is_duplicate(event_id, family_id, status, tickets):
+    now = time.time()
+    key = f"{event_id}|{family_id}|{status}|{tickets}"
+
+    # ניקוי בקשות ישנות
+    expired = [k for k, v in recent_requests.items() if now - v > IDEMPOTENCY_WINDOW]
+    for k in expired:
+        del recent_requests[k]
+
+    if key in recent_requests:
+        return True
+
+    recent_requests[key] = now
+    return False
+
 
 # ======================
 # GET EVENT DATA (ZEBRA)
@@ -91,6 +115,7 @@ def get_event_data(event_id: str):
 
     return event
 
+
 # ======================
 # CONFIRM PAGE
 # ======================
@@ -122,6 +147,7 @@ def confirm():
         location=event["location"]
     )
 
+
 # ======================
 # SUBMIT
 # ======================
@@ -135,6 +161,11 @@ def submit():
     tickets = int(data.get("tickets", 0))
 
     print("=== SUBMIT ===", event_id, family_id, status, tickets)
+
+    # ===== IDEMPOTENCY CHECK =====
+    if is_duplicate(event_id, family_id, status, tickets):
+        print("⚠ DUPLICATE REQUEST IGNORED")
+        return jsonify({"success": True, "duplicate": True})
 
     # ===== Google Apps Script =====
     sheets_payload = {
@@ -154,7 +185,6 @@ def submit():
             timeout=10
         )
         print("GOOGLE STATUS:", r.status_code)
-        print("GOOGLE BODY:", r.text)
     except Exception as e:
         print("Sheets error:", e)
 
@@ -203,6 +233,7 @@ def submit():
 
     return jsonify({"success": True})
 
+
 # ======================
 # THANKS PAGE
 # ======================
@@ -212,12 +243,14 @@ def thanks():
     qty = request.args.get("qty", "0")
     return render_template("thanks.html", status=status, qty=qty)
 
+
 # ======================
 # HEALTH
 # ======================
 @app.route("/")
 def home():
     return "OK – server is running"
+
 
 # ======================
 # RUN
