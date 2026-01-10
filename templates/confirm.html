@@ -58,9 +58,12 @@
         {% endfor %}
     </select>
 
+    <!-- הודעת סטטוס -->
+    <div id="statusMsg" style="font-size:16px; margin:10px 0; color:green;"></div>
+
     <!-- כפתורים -->
     <div>
-        <button onclick="sendResponse('yes')" style="
+        <button id="yesBtn" onclick="sendResponse('yes')" style="
             width:220px;
             padding:14px;
             font-size:16px;
@@ -76,7 +79,7 @@
 
         <br>
 
-        <button onclick="sendResponse('no')" style="
+        <button id="noBtn" onclick="sendResponse('no')" style="
             width:220px;
             padding:14px;
             font-size:16px;
@@ -93,18 +96,45 @@
 </div>
 
 <script>
+let alreadySent = false;
+
+function lockUI(message) {
+    document.getElementById("yesBtn").disabled = true;
+    document.getElementById("noBtn").disabled = true;
+    document.getElementById("yesBtn").style.opacity = 0.6;
+    document.getElementById("noBtn").style.opacity = 0.6;
+    document.getElementById("statusMsg").innerText = message;
+}
+
+function unlockUI(message) {
+    alreadySent = false;
+    document.getElementById("yesBtn").disabled = false;
+    document.getElementById("noBtn").disabled = false;
+    document.getElementById("yesBtn").style.opacity = 1;
+    document.getElementById("noBtn").style.opacity = 1;
+    document.getElementById("statusMsg").innerText = message;
+}
+
 function sendResponse(status) {
+
+    if (alreadySent) return;
+    alreadySent = true;
+
     const qtySelect = document.getElementById("qty");
     let qty = qtySelect.value;
 
     if (status === "yes" && !qty) {
         alert("אנא בחרו כמות כרטיסים");
+        alreadySent = false;
         return;
     }
 
     if (status === "no") {
         qty = 0;
     }
+
+    // פידבק מיידי למשתמש
+    lockUI("האישור נשלח, אנא המתינו…");
 
     fetch("/submit", {
         method: "POST",
@@ -116,8 +146,15 @@ function sendResponse(status) {
             tickets: qty
         })
     })
+    .then(res => {
+        if (!res.ok) throw new Error("Server error");
+        return res.json();
+    })
     .then(() => {
         window.location.href = "/thanks?status=" + status + "&qty=" + qty;
+    })
+    .catch(() => {
+        unlockUI("אירעה שגיאה בשליחה, אנא נסו שוב");
     });
 }
 </script>
