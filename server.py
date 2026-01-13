@@ -143,7 +143,7 @@ def confirm():
     family_name = fam["family_name"]
     valid_events = filter_events(fam["events"])
 
-    # אם אין event_id – מסך בחירת אירוע
+    # בחירת אירוע
     if not event_id:
         if len(valid_events) == 0:
             return "אין אירועים זמינים למשפחה זו"
@@ -176,7 +176,7 @@ def confirm():
 
 
 # ======================
-# SUBMIT – זמני, רק בדיקה
+# SUBMIT – זמני
 # ======================
 @app.route("/submit", methods=["POST"])
 def submit():
@@ -186,17 +186,22 @@ def submit():
 
 
 # ======================
-# THANKS
+# THANKS – פה העיצוב עובד
 # ======================
 @app.route("/thanks")
 def thanks():
     status = request.args.get("status")
-    qty = request.args.get("qty")
-    return f"""
-    תודה!<br>
-    סטטוס: {status}<br>
-    כמות: {qty}
-    """
+    qty = request.args.get("qty", "0")
+    event_id = request.args.get("event_id", "")
+    family_id = request.args.get("family_id", "")
+
+    return render_template(
+        "thanks.html",
+        status=status,
+        qty=qty,
+        event_id=event_id,
+        family_id=family_id
+    )
 
 
 @app.route("/")
