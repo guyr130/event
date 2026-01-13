@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-from flask import Flask, request, render_template
+from flask import Flask, request, render_template, jsonify
 import requests
 import xml.etree.ElementTree as ET
 from datetime import datetime
@@ -173,6 +173,30 @@ def confirm():
         location=ev["location"],
         tickets=ev["tickets"]
     )
+
+
+# ======================
+# SUBMIT – זמני, רק בדיקה
+# ======================
+@app.route("/submit", methods=["POST"])
+def submit():
+    data = request.json or {}
+    print("SUBMIT RECEIVED:", data)
+    return jsonify({"success": True})
+
+
+# ======================
+# THANKS
+# ======================
+@app.route("/thanks")
+def thanks():
+    status = request.args.get("status")
+    qty = request.args.get("qty")
+    return f"""
+    תודה!<br>
+    סטטוס: {status}<br>
+    כמות: {qty}
+    """
 
 
 @app.route("/")
