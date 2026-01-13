@@ -1,34 +1,44 @@
 # -*- coding: utf-8 -*-
-from flask import Flask, request, jsonify
+from flask import Flask, request, render_template, jsonify
 import requests
 from datetime import datetime
-import json
 
 app = Flask(__name__)
 
 # ======================
-# GOOGLE APPS SCRIPT URL  (החדש שלך)
+# GOOGLE APPS SCRIPT URL
 # ======================
 GOOGLE_SHEETS_WEBAPP_URL = "https://script.google.com/macros/s/AKfycbxYOTETwFoJXbFHxNUwh3-AbwUsdnQ680194wn8svCFHE7c9zFreRI9hQhcDrPsAqM1/exec"
 
 
 # ======================
-# CONFIRM – בדיקת חיים
+# CONFIRM  → מציג את הדף המעוצב
 # ======================
 @app.route("/confirm")
 def confirm():
     family_id = request.args.get("family_id")
     event_id = request.args.get("event_id")
 
-    return f"""
-    OK<br>
-    family_id = {family_id}<br>
-    event_id = {event_id}
-    """
+    if not family_id:
+        return "Missing family_id", 400
+
+    # כרגע נתונים סטטיים לבדיקה
+    # בהמשך יבואו מזברה
+    return render_template(
+        "confirm.html",
+        family_id=family_id,
+        family_name="כהן ישראלה וישראל",
+        event_id=event_id or "22459",
+        event_name="אור שמחה וגיפים באקסטרים",
+        event_date="28/01/2026",
+        event_time="09:00",
+        location="צפון הנגב",
+        tickets=2
+    )
 
 
 # ======================
-# SUBMIT → שולח ל-Google Sheet
+# SUBMIT → שולח לשיט
 # ======================
 @app.route("/submit", methods=["POST"])
 def submit():
@@ -37,17 +47,14 @@ def submit():
     print("=== SUBMIT RECEIVED ===")
     print(data)
 
-    # הוספת זמן אם לא הגיע מהקליינט
+    # הוספת חותמת זמן אם לא נשלחה
     if not data.get("timestamp"):
         data["timestamp"] = datetime.now().strftime("%d/%m/%Y %H:%M:%S")
 
     try:
-        print("Sending to Google Apps Script:")
-        print(GOOGLE_SHEETS_WEBAPP_URL)
-
         r = requests.post(
             GOOGLE_SHEETS_WEBAPP_URL,
-            json=data,              # חשוב: json= ולא data=
+            json=data,   # חשוב: שליחה כ־JSON
             timeout=15
         )
 
@@ -71,18 +78,22 @@ def submit():
 
 
 # ======================
-# THANKS – בדיקה בלבד
+# THANKS → דף תודה
 # ======================
 @app.route("/thanks")
 def thanks():
     status = request.args.get("status")
     qty = request.args.get("qty")
+    event_id = request.args.get("event_id")
+    family_id = request.args.get("family_id")
 
-    return f"""
-    תודה!<br>
-    סטטוס: {status}<br>
-    כמות: {qty}
-    """
+    return render_template(
+        "thanks.html",
+        status=status,
+        qty=qty,
+        event_id=event_id,
+        family_id=family_id
+    )
 
 
 # ======================
