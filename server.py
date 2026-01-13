@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-from flask import Flask, request
+from flask import Flask, request, render_template
 import requests
 import xml.etree.ElementTree as ET
 from datetime import datetime
@@ -117,11 +117,13 @@ def filter_events(events):
 
 
 # ======================
-# CONFIRM – בדיקת שליפה + סינון בלבד
+# CONFIRM – מסך בחירה חכם
 # ======================
 @app.route("/confirm")
 def confirm():
     family_id = request.args.get("family_id")
+    event_id = request.args.get("event_id")
+
     if not family_id:
         return "Missing family_id", 400
 
@@ -130,23 +132,43 @@ def confirm():
         return "Family not found in Zebra"
 
     family_name = fam["family_name"]
-    all_events = fam["events"]
-    valid_events = filter_events(all_events)
+    valid_events = filter_events(fam["events"])
 
-    out = []
-    out.append(f"משפחה: {family_name}")
-    out.append(f"כרטיס משפחה: {family_id}")
-    out.append(f"סה\"כ אירועים בזברה: {len(all_events)}")
-    out.append(f"אירועים תקינים (מאושר + תאריך עתידי): {len(valid_events)}")
-    out.append("")
-
-    for i, ev in enumerate(valid_events, 1):
-        out.append(f"{i}) {ev['event_id']} | {ev['event_name']} | {ev['event_date']}")
-
+    # אין אירועים להצגה
     if not valid_events:
-        out.append("אין אירועים להצגה לפי התנאים")
+        return "אין אירועים מאושרים עתידיים למשפחה זו"
 
-    return "<br>".join(out)
+    # אם אין event_id ויש יותר מאירוע אחד → מסך בחירה
+    if not event_id and len(valid_events) > 1:
+        return render_template(
+            "select_event.html",
+            family_id=family_id,
+            family_name=family_name,
+            events=valid_events
+        )
+
+    # אם אין event_id ויש רק אירוע אחד → קפיצה אוטומטית
+    if not event_id and len(valid_events) == 1:
+        ev = valid_events[0]
+        return f"""
+        נבחר אירוע אוטומטית:<br>
+        {ev['event_name']} - {ev['event_date']}<br>
+        <a href="/confirm?family_id={family_id}&event_id={ev['event_id']}">המשך</a>
+        """
+
+    # אם יש event_id – בדיקה שהוא חוקי
+    chosen = next((e for e in valid_events if e["event_id"] == event_id), None)
+    if not chosen:
+        return "אירוע לא חוקי / לא מאושר / עבר זמנו"
+
+    # כרגע רק בדיקה – בהמשך נחזיר confirm.html
+    return f"""
+    אירוע נבחר:<br>
+    משפחה: {family_name}<br>
+    אירוע: {chosen['event_name']}<br>
+    תאריך: {chosen['event_date']}<br>
+    כרטיס אירוע: {chosen['event_id']}
+    """
 
 
 @app.route("/")
