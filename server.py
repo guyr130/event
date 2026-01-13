@@ -9,7 +9,8 @@ app = Flask(__name__)
 # ======================
 # GOOGLE APPS SCRIPT URL
 # ======================
-GOOGLE_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbzOvHxZp9TTztcQjndmf0Q-XEEZcXZrFOQM32D6v6-vWZnL2Rt8Iwwnozc_Z46eFnqU/exec"
+GOOGLE_SHEETS_WEBAPP_URL = "https://script.google.com/macros/s/AKfycbzIlUc9LX2SqXq6QdguAsd0BVvC8G-W6Wo1mpMasFWR5a-4U1ZJv326pRewci0xoXhx/exec"
+
 
 
 # ======================
