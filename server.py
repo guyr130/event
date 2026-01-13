@@ -2,25 +2,18 @@
 from flask import Flask, request, jsonify
 import requests
 from datetime import datetime
+import json
 
 app = Flask(__name__)
 
 # ======================
-# GOOGLE APPS SCRIPT URL
+# GOOGLE APPS SCRIPT URL  (החדש שלך)
 # ======================
-GOOGLE_SHEETS_WEBAPP_URL = "https://script.google.com/macros/s/AKfycbzIlUc9LX2SqXq6QdguAsd0BVvC8G-W6Wo1mpMasFWR5a-4U1ZJv326pRewci0xoXhx/exec"
+GOOGLE_SHEETS_WEBAPP_URL = "https://script.google.com/macros/s/AKfycbxYOTETwFoJXbFHxNUwh3-AbwUsdnQ680194wn8svCFHE7c9zFreRI9hQhcDrPsAqM1/exec"
 
 
 # ======================
-# HOME – בדיקה שהשרת חי
-# ======================
-@app.route("/")
-def home():
-    return "SERVER OK"
-
-
-# ======================
-# CONFIRM – בדיקה פשוטה
+# CONFIRM – בדיקת חיים
 # ======================
 @app.route("/confirm")
 def confirm():
@@ -35,16 +28,16 @@ def confirm():
 
 
 # ======================
-# SUBMIT → שולח לשיט
+# SUBMIT → שולח ל-Google Sheet
 # ======================
 @app.route("/submit", methods=["POST"])
 def submit():
     data = request.json or {}
 
-    print("=== SUBMIT RECEIVED FROM CLIENT ===")
+    print("=== SUBMIT RECEIVED ===")
     print(data)
 
-    # הוספת חותמת זמן אם לא נשלחה
+    # הוספת זמן אם לא הגיע מהקליינט
     if not data.get("timestamp"):
         data["timestamp"] = datetime.now().strftime("%d/%m/%Y %H:%M:%S")
 
@@ -54,7 +47,7 @@ def submit():
 
         r = requests.post(
             GOOGLE_SHEETS_WEBAPP_URL,
-            json=data,      # זה הקריטי – JSON אמיתי
+            json=data,              # חשוב: json= ולא data=
             timeout=15
         )
 
@@ -90,6 +83,14 @@ def thanks():
     סטטוס: {status}<br>
     כמות: {qty}
     """
+
+
+# ======================
+# HEALTH CHECK
+# ======================
+@app.route("/")
+def home():
+    return "Server is alive"
 
 
 # ======================
