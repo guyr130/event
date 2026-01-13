@@ -52,8 +52,11 @@ def get_family_events(family_id):
                 <ID></ID>
                 <EV_N></EV_N>
                 <EV_D></EV_D>
+                <EVE_HOUR></EVE_HOUR>
+                <EVE_LOC></EVE_LOC>
             </FIELDS>
             <CON_FIELDS>
+                <TOT_FFAM></TOT_FFAM>
                 <PROV></PROV>
             </CON_FIELDS>
         </CONNECTION_CARD>
@@ -80,12 +83,18 @@ def get_family_events(family_id):
             event_id = el.findtext("ID", "").strip()
             event_name = el.findtext(".//FIELDS/EV_N", "").strip()
             event_date = el.findtext(".//FIELDS/EV_D", "").strip()
+            event_time = el.findtext(".//FIELDS/EVE_HOUR", "").strip()
+            location = el.findtext(".//FIELDS/EVE_LOC", "").strip()
+            tickets = int(el.findtext(".//CON_FIELDS/TOT_FFAM", "0"))
             prov = el.findtext(".//CON_FIELDS/PROV", "").strip()
 
             events.append({
                 "event_id": event_id,
                 "event_name": event_name,
                 "event_date": event_date,
+                "event_time": event_time,
+                "location": location,
+                "tickets": tickets,
                 "prov": prov
             })
 
@@ -117,7 +126,7 @@ def filter_events(events):
 
 
 # ======================
-# CONFIRM – מסך בחירה חכם
+# CONFIRM
 # ======================
 @app.route("/confirm")
 def confirm():
@@ -134,41 +143,36 @@ def confirm():
     family_name = fam["family_name"]
     valid_events = filter_events(fam["events"])
 
-    # אין אירועים להצגה
-    if not valid_events:
-        return "אין אירועים מאושרים עתידיים למשפחה זו"
+    # אם אין event_id – מסך בחירת אירוע
+    if not event_id:
+        if len(valid_events) == 0:
+            return "אין אירועים זמינים למשפחה זו"
 
-    # אם אין event_id ויש יותר מאירוע אחד → מסך בחירה
-    if not event_id and len(valid_events) > 1:
-        return render_template(
-            "select_event.html",
-            family_id=family_id,
-            family_name=family_name,
-            events=valid_events
-        )
+        if len(valid_events) == 1:
+            ev = valid_events[0]
+        else:
+            return render_template(
+                "select_event.html",
+                family_id=family_id,
+                family_name=family_name,
+                events=valid_events
+            )
+    else:
+        ev = next((e for e in valid_events if e["event_id"] == event_id), None)
+        if not ev:
+            return "האירוע לא נמצא או לא מאושר"
 
-    # אם אין event_id ויש רק אירוע אחד → קפיצה אוטומטית
-    if not event_id and len(valid_events) == 1:
-        ev = valid_events[0]
-        return f"""
-        נבחר אירוע אוטומטית:<br>
-        {ev['event_name']} - {ev['event_date']}<br>
-        <a href="/confirm?family_id={family_id}&event_id={ev['event_id']}">המשך</a>
-        """
-
-    # אם יש event_id – בדיקה שהוא חוקי
-    chosen = next((e for e in valid_events if e["event_id"] == event_id), None)
-    if not chosen:
-        return "אירוע לא חוקי / לא מאושר / עבר זמנו"
-
-    # כרגע רק בדיקה – בהמשך נחזיר confirm.html
-    return f"""
-    אירוע נבחר:<br>
-    משפחה: {family_name}<br>
-    אירוע: {chosen['event_name']}<br>
-    תאריך: {chosen['event_date']}<br>
-    כרטיס אירוע: {chosen['event_id']}
-    """
+    return render_template(
+        "confirm.html",
+        family_id=family_id,
+        family_name=family_name,
+        event_id=ev["event_id"],
+        event_name=ev["event_name"],
+        event_date=ev["event_date"],
+        event_time=ev["event_time"],
+        location=ev["location"],
+        tickets=ev["tickets"]
+    )
 
 
 @app.route("/")
