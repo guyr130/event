@@ -21,9 +21,9 @@ FIXED_DATE = "20/12/2025"
 FIXED_TIME = "08:00"
 
 # ======================
-# GOOGLE APPS SCRIPT
+# GOOGLE APPS SCRIPT (LOG)
 # ======================
-GOOGLE_SHEETS_WEBAPP_URL = "https://script.google.com/macros/s/AKfycbylZEMnARMNW-HH98Y8dtRpA9HLi9KZXK5LsRl_KApfxv7V2TgtRjGvBwWSq-OCrtdq/exec"
+GOOGLE_SHEETS_WEBAPP_URL = "https://script.google.com/macros/s/AKfycbyYTuGyUg1YLJyclKj31X5r1Aa4rcqo0oMHcsoR2KQKv7KKAFSu65lf7B1o8UM771oy/exec"
 
 # ======================
 # MEMORY FOR IDEMPOTENCY
@@ -36,7 +36,6 @@ def is_duplicate(event_id, family_id, status, tickets):
     now = time.time()
     key = f"{event_id}|{family_id}|{status}|{tickets}"
 
-    # ניקוי בקשות ישנות
     expired = [k for k, v in recent_requests.items() if now - v > IDEMPOTENCY_WINDOW]
     for k in expired:
         del recent_requests[k]
@@ -48,10 +47,48 @@ def is_duplicate(event_id, family_id, status, tickets):
     return False
 
 
+def parse_ddmmyyyy(date_str: str):
+    date_str = (date_str or "").strip()
+    if not date_str:
+        return None
+    try:
+        return datetime.strptime(date_str, "%d/%m/%Y").date()
+    except Exception:
+        return None
+
+
+def zebra_post(xml_body: str, timeout: int = 15) -> str:
+    r = requests.post(
+        ZEBRA_GET_URL,
+        data=xml_body.encode("utf-8"),
+        headers={"Content-Type": "application/xml"},
+        timeout=timeout
+    )
+    return r.text
+
+
 # ======================
-# GET EVENT DATA (ZEBRA)
+# GET FAMILY + EVENTS (ZEBRA)  ✅ חדש
 # ======================
-def get_event_data(event_id: str):
+def get_family_events(family_id: str):
+    """
+    מחזיר:
+    {
+      "family_id": "...",
+      "family_name": "...",
+      "events": [
+        {
+          "event_id": "...",
+          "event_name": "...",
+          "event_date": "DD/MM/YYYY",
+          "event_time": "HH:MM",
+          "location": "...",
+          "tickets_approved": int,
+          "prov": "0/1"
+        }, ...
+      ]
+    }
+    """
     xml_body = f"""
 <ROOT>
     <PERMISSION>
@@ -59,22 +96,24 @@ def get_event_data(event_id: str):
         <PASSWORD>{ZEBRA_PASS}</PASSWORD>
     </PERMISSION>
 
-    <ID_FILTER>{event_id}</ID_FILTER>
+    <ID_FILTER>{family_id}</ID_FILTER>
 
     <FIELDS>
-        <EV_N></EV_N>
-        <EV_D></EV_D>
-        <EVE_HOUR></EVE_HOUR>
-        <EVE_LOC></EVE_LOC>
+        <CO_NAME></CO_NAME>
     </FIELDS>
 
     <CONNECTION_CARDS>
         <CONNECTION_CARD>
             <CONNECTION_KEY>ASKEV</CONNECTION_KEY>
+
             <FIELDS>
                 <ID></ID>
-                <CO_NAME></CO_NAME>
+                <EV_N></EV_N>
+                <EV_D></EV_D>
+                <EVE_HOUR></EVE_HOUR>
+                <EVE_LOC></EVE_LOC>
             </FIELDS>
+
             <CON_FIELDS>
                 <TOT_FFAM></TOT_FFAM>
                 <PROV></PROV>
@@ -84,81 +123,159 @@ def get_event_data(event_id: str):
 </ROOT>
 """.strip()
 
-    r = requests.post(
-        ZEBRA_GET_URL,
-        data=xml_body.encode("utf-8"),
-        headers={"Content-Type": "application/xml"},
-        timeout=15
-    )
+    text = zebra_post(xml_body)
+    tree = ET.fromstring(text)
 
-    tree = ET.fromstring(r.text)
-    card = tree.find(".//CARD")
+    card = tree.find(".//CARDS/CARD")
     if card is None:
         return None
 
-    event = {
-        "event_name": card.findtext(".//EV_N", "").strip(),
-        "event_date": card.findtext(".//EV_D", "").strip() or FIXED_DATE,
-        "event_time": card.findtext(".//EVE_HOUR", "").strip() or FIXED_TIME,
-        "location": card.findtext(".//EVE_LOC", "").strip(),
-        "families": []
-    }
+    family_name = card.findtext(".//FIELDS/CO_NAME", "").strip()
 
-    for el in card.findall(".//CONNECTIONS_CARDS/*"):
-        if el.tag.startswith("CARD_CONNECTION_"):
-            event["families"].append({
-                "id": el.findtext("ID"),
-                "family_name": el.findtext(".//CO_NAME", "").strip(),
-                "tickets": int(el.findtext(".//TOT_FFAM", "0")),
-                "approved": el.findtext(".//PROV", "0")
+    events = []
+    connections = card.find(".//CONNECTIONS_CARDS")
+    if connections is not None:
+        for el in list(connections):
+            if not el.tag.startswith("CARD_CONNECTION_"):
+                continue
+
+            event_id = (el.findtext("ID") or "").strip()
+            event_name = (el.findtext(".//FIELDS/EV_N") or "").strip()
+            event_date = (el.findtext(".//FIELDS/EV_D") or "").strip()
+            event_time = (el.findtext(".//FIELDS/EVE_HOUR") or "").strip() or FIXED_TIME
+            location = (el.findtext(".//FIELDS/EVE_LOC") or "").strip()
+            tickets_approved = int((el.findtext(".//CON_FIELDS/TOT_FFAM") or "0").strip() or "0")
+            prov = (el.findtext(".//CON_FIELDS/PROV") or "0").strip()
+
+            events.append({
+                "event_id": event_id,
+                "event_name": event_name,
+                "event_date": event_date,
+                "event_time": event_time,
+                "location": location,
+                "tickets_approved": tickets_approved,
+                "prov": prov
             })
 
-    return event
+    return {
+        "family_id": family_id,
+        "family_name": family_name,
+        "events": events
+    }
+
+
+def filter_events(events):
+    """
+    מציגים רק:
+    - PROV == "1"
+    - תאריך מהיום והלאה
+    """
+    today = datetime.today().date()
+    out = []
+    for ev in events:
+        if str(ev.get("prov", "")).strip() != "1":
+            continue
+
+        ev_date = parse_ddmmyyyy(ev.get("event_date", ""))
+        if ev_date is None:
+            # אם אין תאריך תקין – לא מציגים (יותר בטוח)
+            continue
+
+        if ev_date < today:
+            continue
+
+        out.append(ev)
+
+    # מיון לפי תאריך ואז שעה
+    def sort_key(x):
+        d = parse_ddmmyyyy(x.get("event_date", "")) or today
+        t = (x.get("event_time", "") or "00:00").strip()
+        return (d, t)
+
+    out.sort(key=sort_key)
+    return out
 
 
 # ======================
-# CONFIRM PAGE
+# CONFIRM PAGE  ✅ תומך גם בלינק אחוד וגם בלינק ישן
 # ======================
 @app.route("/confirm")
 def confirm():
-    event_id = request.args.get("event_id")
     family_id = request.args.get("family_id")
+    event_id = request.args.get("event_id")
 
-    if not event_id or not family_id:
-        return "Missing parameters", 400
+    if not family_id:
+        return "Missing family_id", 400
 
-    event = get_event_data(event_id)
-    if not event:
-        return "Event not found in Zebra", 404
+    fam = get_family_events(family_id)
+    if not fam:
+        return "Family not found in Zebra", 404
 
-    family = next((f for f in event["families"] if f["id"] == family_id), None)
-    if not family:
-        return "Family not connected to event", 404
+    family_name = fam["family_name"]
+    valid_events = filter_events(fam["events"])
+
+    # אם אין event_id => מצב לינק אחוד: מציגים רשימת אירועים / או קופצים ל-1
+    if not event_id:
+        if len(valid_events) == 0:
+            return "No approved future events for this family", 404
+
+        if len(valid_events) == 1:
+            ev = valid_events[0]
+            return render_template(
+                "confirm.html",
+                event_id=ev["event_id"],
+                family_id=family_id,
+                family_name=family_name,
+                tickets=ev["tickets_approved"],
+                event_name=ev["event_name"],
+                event_date=ev["event_date"],
+                event_time=ev["event_time"],
+                location=ev["location"]
+            )
+
+        return render_template(
+            "select_event.html",
+            family_id=family_id,
+            family_name=family_name,
+            events=valid_events
+        )
+
+    # אם יש event_id (לינק ישן או בחירה מהמסך)
+    chosen = next((e for e in valid_events if e["event_id"] == str(event_id).strip()), None)
+    if not chosen:
+        return "Event not allowed (not approved / past / not connected)", 404
 
     return render_template(
         "confirm.html",
-        event_id=event_id,
+        event_id=chosen["event_id"],
         family_id=family_id,
-        family_name=family["family_name"],
-        tickets=family["tickets"],
-        event_name=event["event_name"],
-        event_date=event["event_date"],
-        event_time=event["event_time"],
-        location=event["location"]
+        family_name=family_name,
+        tickets=chosen["tickets_approved"],
+        event_name=chosen["event_name"],
+        event_date=chosen["event_date"],
+        event_time=chosen["event_time"],
+        location=chosen["location"]
     )
 
 
 # ======================
-# SUBMIT
+# SUBMIT  ✅ כותב LOG + משאיר Zebra UPDATE כמו היום
 # ======================
 @app.route("/submit", methods=["POST"])
 def submit():
     data = request.json or {}
 
-    event_id = data.get("event_id")
-    family_id = data.get("family_id")
-    status = data.get("status")
-    tickets = int(data.get("tickets", 0))
+    event_id = str(data.get("event_id") or "").strip()
+    family_id = str(data.get("family_id") or "").strip()
+    status = str(data.get("status") or "").strip()  # yes/no
+    tickets = int(data.get("tickets", 0) or 0)
+
+    # אופציונלי (נשלח מה-HTML)
+    family_name = (data.get("family_name") or "").strip()
+    event_name = (data.get("event_name") or "").strip()
+
+    if not event_id or not family_id or status not in ("yes", "no"):
+        return jsonify({"success": False, "error": "Missing parameters"}), 400
 
     print("=== SUBMIT ===", event_id, family_id, status, tickets)
 
@@ -167,28 +284,41 @@ def submit():
         print("⚠ DUPLICATE REQUEST IGNORED")
         return jsonify({"success": True, "duplicate": True})
 
-    # ===== Google Apps Script =====
+    # אם אין שמות (ליתר ביטחון), נשלוף מהזברה
+    if not family_name or not event_name:
+        fam = get_family_events(family_id)
+        if fam:
+            family_name = family_name or fam.get("family_name", "")
+            ev = next((e for e in fam.get("events", []) if str(e.get("event_id")) == event_id), None)
+            if ev:
+                event_name = event_name or ev.get("event_name", "")
+
+    # ===== Google LOG =====
+    status_he = "אישרו" if status == "yes" else "ביטלו"
+    timestamp = datetime.now().strftime("%d/%m/%Y %H:%M:%S")
+
     sheets_payload = {
-        "timestamp": datetime.now().isoformat(),
-        "event_id": event_id,
+        "timestamp": timestamp,
         "family_id": family_id,
-        "status": status,
-        "tickets": tickets,
-        "ip": request.remote_addr
+        "family_name": family_name,
+        "event_id": event_id,
+        "event_name": event_name,
+        "status": status_he,
+        "tickets": tickets
     }
 
     try:
         r = requests.post(
             GOOGLE_SHEETS_WEBAPP_URL,
             headers={"Content-Type": "application/json"},
-            data=json.dumps(sheets_payload),
-            timeout=10
+            data=json.dumps(sheets_payload, ensure_ascii=False),
+            timeout=12
         )
-        print("GOOGLE STATUS:", r.status_code)
+        print("GOOGLE STATUS:", r.status_code, r.text[:200])
     except Exception as e:
         print("Sheets error:", e)
 
-    # ===== Zebra UPDATE =====
+    # ===== Zebra UPDATE (נשאר כמו אצלך) =====
     a_c = "אישרו" if status == "yes" else "ביטלו"
     no_arive = tickets if status == "yes" else 0
 
@@ -227,7 +357,7 @@ def submit():
             headers={"Content-Type": "application/xml"},
             timeout=15
         )
-        print("ZEBRA STATUS:", z.status_code)
+        print("ZEBRA STATUS:", z.status_code, z.text[:200])
     except Exception as e:
         print("Zebra error:", e)
 
@@ -241,7 +371,9 @@ def submit():
 def thanks():
     status = request.args.get("status")
     qty = request.args.get("qty", "0")
-    return render_template("thanks.html", status=status, qty=qty)
+    event_id = request.args.get("event_id", "")
+    family_id = request.args.get("family_id", "")
+    return render_template("thanks.html", status=status, qty=qty, event_id=event_id, family_id=family_id)
 
 
 # ======================
