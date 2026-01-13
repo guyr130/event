@@ -29,7 +29,7 @@ GOOGLE_SHEETS_WEBAPP_URL = "https://script.google.com/macros/s/AKfycbyYTuGyUg1YL
 # MEMORY FOR IDEMPOTENCY
 # ======================
 recent_requests = {}
-IDEMPOTENCY_WINDOW = 15  # seconds
+IDEMPOTENCY_WINDOW = 15
 
 
 def is_duplicate(event_id, family_id, status, tickets):
@@ -48,6 +48,106 @@ def is_duplicate(event_id, family_id, status, tickets):
 
 
 # ======================
+# ZEBRA GET EVENT
+# ======================
+def get_event_data(event_id: str):
+    xml_body = f"""
+<ROOT>
+    <PERMISSION>
+        <USERNAME>{ZEBRA_USER}</USERNAME>
+        <PASSWORD>{ZEBRA_PASS}</PASSWORD>
+    </PERMISSION>
+
+    <ID_FILTER>{event_id}</ID_FILTER>
+
+    <FIELDS>
+        <EV_N></EV_N>
+        <EV_D></EV_D>
+        <EVE_HOUR></EVE_HOUR>
+        <EVE_LOC></EVE_LOC>
+    </FIELDS>
+
+    <CONNECTION_CARDS>
+        <CONNECTION_CARD>
+            <CONNECTION_KEY>ASKEV</CONNECTION_KEY>
+            <FIELDS>
+                <ID></ID>
+                <CO_NAME></CO_NAME>
+            </FIELDS>
+            <CON_FIELDS>
+                <TOT_FFAM></TOT_FFAM>
+                <PROV></PROV>
+            </CON_FIELDS>
+        </CONNECTION_CARD>
+    </CONNECTION_CARDS>
+</ROOT>
+""".strip()
+
+    r = requests.post(
+        ZEBRA_GET_URL,
+        data=xml_body.encode("utf-8"),
+        headers={"Content-Type": "application/xml"},
+        timeout=15
+    )
+
+    tree = ET.fromstring(r.text)
+    card = tree.find(".//CARD")
+    if card is None:
+        return None
+
+    event = {
+        "event_name": card.findtext(".//EV_N", "").strip(),
+        "event_date": card.findtext(".//EV_D", "").strip(),
+        "event_time": card.findtext(".//EVE_HOUR", "").strip() or FIXED_TIME,
+        "location": card.findtext(".//EVE_LOC", "").strip(),
+        "families": []
+    }
+
+    for el in card.findall(".//CONNECTIONS_CARDS/*"):
+        if el.tag.startswith("CARD_CONNECTION_"):
+            event["families"].append({
+                "id": el.findtext("ID"),
+                "family_name": el.findtext(".//CO_NAME", "").strip(),
+                "tickets": int(el.findtext(".//TOT_FFAM", "0")),
+                "approved": el.findtext(".//PROV", "0")
+            })
+
+    return event
+
+
+# ======================
+# CONFIRM PAGE
+# ======================
+@app.route("/confirm")
+def confirm():
+    event_id = request.args.get("event_id")
+    family_id = request.args.get("family_id")
+
+    if not event_id or not family_id:
+        return "Missing parameters", 400
+
+    event = get_event_data(event_id)
+    if not event:
+        return "Event not found in Zebra", 404
+
+    family = next((f for f in event["families"] if f["id"] == family_id), None)
+    if not family:
+        return "Family not connected to event", 404
+
+    return render_template(
+        "confirm.html",
+        event_id=event_id,
+        family_id=family_id,
+        family_name=family["family_name"],
+        tickets=family["tickets"],
+        event_name=event["event_name"],
+        event_date=event["event_date"],
+        event_time=event["event_time"],
+        location=event["location"]
+    )
+
+
+# ======================
 # SUBMIT
 # ======================
 @app.route("/submit", methods=["POST"])
@@ -62,17 +162,12 @@ def submit():
     family_name = (data.get("family_name") or "").strip()
     event_name = (data.get("event_name") or "").strip()
 
-    if not event_id or not family_id or status not in ("yes", "no"):
-        return jsonify({"success": False, "error": "Missing parameters"}), 400
-
     print("=== SUBMIT ===", event_id, family_id, status, tickets)
 
-    # ===== IDEMPOTENCY CHECK =====
     if is_duplicate(event_id, family_id, status, tickets):
-        print("⚠ DUPLICATE REQUEST IGNORED")
+        print("⚠ DUPLICATE IGNORED")
         return jsonify({"success": True, "duplicate": True})
 
-    # ===== Google Apps Script LOG =====
     status_he = "אישרו" if status == "yes" else "ביטלו"
     timestamp = datetime.now().strftime("%d/%m/%Y %H:%M:%S")
 
@@ -86,77 +181,28 @@ def submit():
         "tickets": tickets
     }
 
+    # 🔥 כאן התיקון הקריטי
     try:
-        print("Sending to Apps Script:", sheets_payload)
-
         r = requests.post(
             GOOGLE_SHEETS_WEBAPP_URL,
-            json=sheets_payload,   # 🔥 השינוי הקריטי – json= ולא data=
+            json=sheets_payload,
             timeout=12
         )
-
-        print("GOOGLE STATUS:", r.status_code)
-        print("GOOGLE RESPONSE:", r.text)
-
+        print("GOOGLE STATUS:", r.status_code, r.text)
     except Exception as e:
         print("Sheets error:", e)
-
-    # ===== Zebra UPDATE =====
-    a_c = "אישרו" if status == "yes" else "ביטלו"
-    no_arive = tickets if status == "yes" else 0
-
-    zebra_xml = f"""<?xml version="1.0" encoding="utf-8"?>
-<ROOT>
-    <PERMISSION>
-        <USERNAME>{ZEBRA_USER}</USERNAME>
-        <PASSWORD>{ZEBRA_PASS}</PASSWORD>
-    </PERMISSION>
-
-    <CARD_TYPE>business_customer</CARD_TYPE>
-
-    <IDENTIFIER>
-        <ID>{family_id}</ID>
-    </IDENTIFIER>
-
-    <CONNECTION_CARD_DETAILS>
-        <UPDATE_EVEN_CONNECTED>1</UPDATE_EVEN_CONNECTED>
-        <CONNECTION_KEY>ASKEV</CONNECTION_KEY>
-        <KEY>ID</KEY>
-        <VALUE>{event_id}</VALUE>
-
-        <FIELDS>
-            <A_C>{a_c}</A_C>
-            <A_D>{FIXED_DATE}</A_D>
-            <NO_ARIVE>{no_arive}</NO_ARIVE>
-        </FIELDS>
-    </CONNECTION_CARD_DETAILS>
-</ROOT>
-"""
-
-    try:
-        z = requests.post(
-            ZEBRA_UPDATE_URL,
-            data=zebra_xml.encode("utf-8"),
-            headers={"Content-Type": "application/xml"},
-            timeout=15
-        )
-        print("ZEBRA STATUS:", z.status_code, z.text[:200])
-    except Exception as e:
-        print("Zebra error:", e)
 
     return jsonify({"success": True})
 
 
 # ======================
-# THANKS PAGE
+# THANKS
 # ======================
 @app.route("/thanks")
 def thanks():
     status = request.args.get("status")
     qty = request.args.get("qty", "0")
-    event_id = request.args.get("event_id", "")
-    family_id = request.args.get("family_id", "")
-    return render_template("thanks.html", status=status, qty=qty, event_id=event_id, family_id=family_id)
+    return render_template("thanks.html", status=status, qty=qty)
 
 
 # ======================
