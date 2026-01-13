@@ -1,8 +1,7 @@
 # -*- coding: utf-8 -*-
-from flask import Flask, request, render_template, jsonify
+from flask import Flask, request, jsonify
 import requests
 from datetime import datetime
-import json
 
 app = Flask(__name__)
 
@@ -13,7 +12,15 @@ GOOGLE_SHEETS_WEBAPP_URL = "https://script.google.com/macros/s/AKfycbzIlUc9LX2Sq
 
 
 # ======================
-# CONFIRM (בדיקה פשוטה)
+# HOME – בדיקה שהשרת חי
+# ======================
+@app.route("/")
+def home():
+    return "SERVER OK"
+
+
+# ======================
+# CONFIRM – בדיקה פשוטה
 # ======================
 @app.route("/confirm")
 def confirm():
@@ -37,17 +44,17 @@ def submit():
     print("=== SUBMIT RECEIVED FROM CLIENT ===")
     print(data)
 
-    # מוסיפים חותמת זמן אם לא נשלחה
+    # הוספת חותמת זמן אם לא נשלחה
     if not data.get("timestamp"):
         data["timestamp"] = datetime.now().strftime("%d/%m/%Y %H:%M:%S")
 
     try:
-        print("Sending to Google Sheets URL:")
+        print("Sending to Google Apps Script:")
         print(GOOGLE_SHEETS_WEBAPP_URL)
 
         r = requests.post(
             GOOGLE_SHEETS_WEBAPP_URL,
-            json=data,  # זה השינוי החשוב
+            json=data,      # זה הקריטי – JSON אמיתי
             timeout=15
         )
 
@@ -71,7 +78,7 @@ def submit():
 
 
 # ======================
-# THANKS (בדיקה בלבד)
+# THANKS – בדיקה בלבד
 # ======================
 @app.route("/thanks")
 def thanks():
@@ -83,14 +90,6 @@ def thanks():
     סטטוס: {status}<br>
     כמות: {qty}
     """
-
-
-# ======================
-# HEALTH CHECK
-# ======================
-@app.route("/")
-def home():
-    return "Server is alive"
 
 
 # ======================
