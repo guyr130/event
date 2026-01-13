@@ -12,7 +12,6 @@ app = Flask(__name__)
 GOOGLE_SHEETS_WEBAPP_URL = "https://script.google.com/macros/s/AKfycbzIlUc9LX2SqXq6QdguAsd0BVvC8G-W6Wo1mpMasFWR5a-4U1ZJv326pRewci0xoXhx/exec"
 
 
-
 # ======================
 # CONFIRM (בדיקה פשוטה)
 # ======================
@@ -43,10 +42,12 @@ def submit():
         data["timestamp"] = datetime.now().strftime("%d/%m/%Y %H:%M:%S")
 
     try:
+        print("Sending to Google Sheets URL:")
+        print(GOOGLE_SHEETS_WEBAPP_URL)
+
         r = requests.post(
-            GOOGLE_SCRIPT_URL,
-            headers={"Content-Type": "application/json"},
-            data=json.dumps(data, ensure_ascii=False),
+            GOOGLE_SHEETS_WEBAPP_URL,
+            json=data,  # זה השינוי החשוב
             timeout=15
         )
 
@@ -54,12 +55,19 @@ def submit():
         print("Status:", r.status_code)
         print("Body:", r.text)
 
-        return jsonify({"success": True, "google_status": r.status_code})
+        return jsonify({
+            "success": True,
+            "google_status": r.status_code,
+            "google_body": r.text
+        })
 
     except Exception as e:
         print("=== ERROR SENDING TO GOOGLE SCRIPT ===")
         print(e)
-        return jsonify({"success": False, "error": str(e)}), 500
+        return jsonify({
+            "success": False,
+            "error": str(e)
+        }), 500
 
 
 # ======================
