@@ -17,22 +17,18 @@
 
 <div style="max-width:420px; margin:0 auto; padding:20px;">
 
-    <!-- לוגו -->
     <img
         src="https://www.or4family.org.il/wp-content/uploads/2025/11/logo-1.png"
         alt="לוגו אור למשפחות"
         style="display:block; width:100%; max-width:260px; margin:0 auto 24px auto;"
     >
 
-    <!-- כותרת -->
     <h1 style="color:#0b5fa5;">אישור הגעה</h1>
 
-    <!-- טקסט משפחה -->
     <p style="font-size:18px;">
         משפחת <strong>{{ family_name }}</strong> היקרה,
     </p>
 
-    <!-- פרטי אירוע -->
     <p style="font-size:17px; line-height:1.6;">
         אושרו לכם <strong>{{ tickets }}</strong> כרטיסים לאירוע<br>
         <strong>{{ event_name }}</strong><br>
@@ -41,7 +37,6 @@
         במקום {{ location }}
     </p>
 
-    <!-- בחירת כמות -->
     <p style="margin-top:20px;">בחרו כמות:</p>
 
     <select id="qty" style="
@@ -58,10 +53,8 @@
         {% endfor %}
     </select>
 
-    <!-- הודעת סטטוס -->
     <div id="statusMsg" style="font-size:16px; margin:10px 0; color:green;"></div>
 
-    <!-- כפתורים -->
     <div>
         <button id="yesBtn" onclick="sendResponse('yes')" style="
             width:220px;
@@ -133,7 +126,6 @@ function sendResponse(status) {
         qty = 0;
     }
 
-    // פידבק מיידי למשתמש
     lockUI("האישור נשלח, אנא המתינו…");
 
     fetch("/submit", {
@@ -142,6 +134,8 @@ function sendResponse(status) {
         body: JSON.stringify({
             event_id: "{{ event_id }}",
             family_id: "{{ family_id }}",
+            family_name: "{{ family_name }}",
+            event_name: "{{ event_name }}",
             status: status,
             tickets: qty
         })
@@ -151,7 +145,11 @@ function sendResponse(status) {
         return res.json();
     })
     .then(() => {
-        window.location.href = "/thanks?status=" + status + "&qty=" + qty;
+        window.location.href =
+          "/thanks?status=" + status +
+          "&qty=" + qty +
+          "&event_id={{ event_id }}" +
+          "&family_id={{ family_id }}";
     })
     .catch(() => {
         unlockUI("אירעה שגיאה בשליחה, אנא נסו שוב");
