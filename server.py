@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-from flask import Flask, request, jsonify
+from flask import Flask, request
 import requests
 import xml.etree.ElementTree as ET
 from datetime import datetime
@@ -13,15 +13,25 @@ ZEBRA_GET_URL = "https://25098.zebracrm.com/ext_interface.php?b=get_multi_cards_
 ZEBRA_USER = "IVAPP"
 ZEBRA_PASS = "1q2w3e4r"
 
-# ======================
-# GOOGLE APPS SCRIPT (LOG)
-# ======================
-GOOGLE_SHEETS_WEBAPP_URL = "https://script.google.com/macros/s/AKfycbyYTuGyUg1YLJyclKj31X5r1Aa4rcqo0oMHcsoR2KQKv7KKAFSu65lf7B1o8UM771oy/exec"
 
-# ======================
-# ZEBRA – שליפת משפחה ואירועים (בדיקה בלבד)
-# ======================
-def get_family_events(family_id: str):
+def zebra_post(xml_body: str) -> str:
+    r = requests.post(
+        ZEBRA_GET_URL,
+        data=xml_body.encode("utf-8"),
+        headers={"Content-Type": "application/xml"},
+        timeout=15
+    )
+    return r.text
+
+
+def parse_ddmmyyyy(date_str):
+    try:
+        return datetime.strptime(date_str.strip(), "%d/%m/%Y").date()
+    except:
+        return None
+
+
+def get_family_events(family_id):
     xml_body = f"""
 <ROOT>
     <PERMISSION>
@@ -38,15 +48,12 @@ def get_family_events(family_id: str):
     <CONNECTION_CARDS>
         <CONNECTION_CARD>
             <CONNECTION_KEY>ASKEV</CONNECTION_KEY>
-
             <FIELDS>
                 <ID></ID>
                 <EV_N></EV_N>
                 <EV_D></EV_D>
             </FIELDS>
-
             <CON_FIELDS>
-                <TOT_FFAM></TOT_FFAM>
                 <PROV></PROV>
             </CON_FIELDS>
         </CONNECTION_CARD>
@@ -54,14 +61,7 @@ def get_family_events(family_id: str):
 </ROOT>
 """.strip()
 
-    r = requests.post(
-        ZEBRA_GET_URL,
-        data=xml_body.encode("utf-8"),
-        headers={"Content-Type": "application/xml"},
-        timeout=15
-    )
-
-    text = r.text
+    text = zebra_post(xml_body)
     tree = ET.fromstring(text)
 
     card = tree.find(".//CARDS/CARD")
@@ -77,10 +77,10 @@ def get_family_events(family_id: str):
             if not el.tag.startswith("CARD_CONNECTION_"):
                 continue
 
-            event_id = (el.findtext("ID") or "").strip()
-            event_name = (el.findtext(".//FIELDS/EV_N") or "").strip()
-            event_date = (el.findtext(".//FIELDS/EV_D") or "").strip()
-            prov = (el.findtext(".//CON_FIELDS/PROV") or "").strip()
+            event_id = el.findtext("ID", "").strip()
+            event_name = el.findtext(".//FIELDS/EV_N", "").strip()
+            event_date = el.findtext(".//FIELDS/EV_D", "").strip()
+            prov = el.findtext(".//CON_FIELDS/PROV", "").strip()
 
             events.append({
                 "event_id": event_id,
@@ -95,62 +95,64 @@ def get_family_events(family_id: str):
         "events": events
     }
 
+
+def filter_events(events):
+    today = datetime.today().date()
+    valid = []
+
+    for ev in events:
+        if ev["prov"] != "1":
+            continue
+
+        d = parse_ddmmyyyy(ev["event_date"])
+        if not d:
+            continue
+
+        if d < today:
+            continue
+
+        valid.append(ev)
+
+    return valid
+
+
 # ======================
-# CONFIRM – שלב בדיקה של זברה בלבד
+# CONFIRM – בדיקת שליפה + סינון בלבד
 # ======================
 @app.route("/confirm")
 def confirm():
     family_id = request.args.get("family_id")
-
     if not family_id:
         return "Missing family_id", 400
 
     fam = get_family_events(family_id)
-
     if not fam:
-        return "Family not found in Zebra", 404
+        return "Family not found in Zebra"
 
-    return f"""
-    Family found ✔️<br>
-    Family ID: {fam['family_id']}<br>
-    Family Name: {fam['family_name']}<br>
-    Events count: {len(fam['events'])}<br>
-    First event sample:<br>
-    {fam['events'][0] if fam['events'] else 'No events'}
-    """
+    family_name = fam["family_name"]
+    all_events = fam["events"]
+    valid_events = filter_events(all_events)
 
-# ======================
-# SUBMIT – בדיקת לוג בלבד (עוד לא משתמשים)
-# ======================
-@app.route("/submit", methods=["POST"])
-def submit():
-    data = request.json or {}
+    out = []
+    out.append(f"משפחה: {family_name}")
+    out.append(f"כרטיס משפחה: {family_id}")
+    out.append(f"סה\"כ אירועים בזברה: {len(all_events)}")
+    out.append(f"אירועים תקינים (מאושר + תאריך עתידי): {len(valid_events)}")
+    out.append("")
 
-    print("=== SUBMIT RECEIVED ===")
-    print(data)
+    for i, ev in enumerate(valid_events, 1):
+        out.append(f"{i}) {ev['event_id']} | {ev['event_name']} | {ev['event_date']}")
 
-    try:
-        r = requests.post(
-            GOOGLE_SHEETS_WEBAPP_URL,
-            json=data,
-            timeout=12
-        )
-        print("GOOGLE STATUS:", r.status_code)
-        print("GOOGLE RESPONSE:", r.text)
-    except Exception as e:
-        print("Sheets error:", e)
+    if not valid_events:
+        out.append("אין אירועים להצגה לפי התנאים")
 
-    return jsonify({"success": True})
+    return "<br>".join(out)
 
-# ======================
-# HEALTH
-# ======================
+
 @app.route("/")
 def home():
     return "Server is alive"
 
-# ======================
-# RUN
-# ======================
+
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=10000, debug=True)
