@@ -35,25 +35,35 @@ def extract_cards_safe(xml_text):
     return cards
 
 # ======================
-# EVENTS – API
+# שליפת אירועים למשפחה – אישורי הגעה בלבד
 # ======================
-@app.route("/events")
-def events():
+def get_family_events_for_confirm(family_id):
     xml_body = f"""
 <ROOT>
     <PERMISSION>
         <USERNAME>{ZEBRA_USER}</USERNAME>
         <PASSWORD>{ZEBRA_PASS}</PASSWORD>
     </PERMISSION>
-    <CARD_TYPE_FILTER>EVEFAM</CARD_TYPE_FILTER>
-    <FIELDS>
-        <EV_N></EV_N>
-        <EV_D></EV_D>
-        <EVE_HOUR></EVE_HOUR>
-        <EVE_LOC></EVE_LOC>
-        <EVE_ORDER></EVE_ORDER>
-        <STA_EV></STA_EV>
-    </FIELDS>
+
+    <ID_FILTER>{family_id}</ID_FILTER>
+
+    <CONNECTION_CARDS>
+        <CONNECTION_CARD>
+            <CONNECTION_KEY>ASKEV</CONNECTION_KEY>
+
+            <FIELDS>
+                <ID></ID>
+                <EV_N></EV_N>
+                <EV_D></EV_D>
+                <EVE_HOUR></EVE_HOUR>
+                <EVE_LOC></EVE_LOC>
+            </FIELDS>
+
+            <CON_FIELDS>
+                <PROV></PROV>
+            </CON_FIELDS>
+        </CONNECTION_CARD>
+    </CONNECTION_CARDS>
 </ROOT>
 """.strip()
 
@@ -72,41 +82,32 @@ def events():
     except Exception:
         cards = extract_cards_safe(raw_xml)
 
-    result = []
+    events = []
 
     for card in cards:
-        fields = card.find("FIELDS")
-        if not fields:
-            continue
+        for conn in card.findall(".//CARD_CONNECTION_*"):
+            prov = (conn.findtext(".//CON_FIELDS/PROV") or "").strip()
+            if prov != "1":
+                continue
 
-        if (fields.findtext("STA_EV") or "").strip() != "1":
-            continue
+            ev_date = (conn.findtext(".//FIELDS/EV_D") or "").strip()
+            parsed_date = parse_date(ev_date)
+            if not parsed_date or parsed_date < datetime.today().date():
+                continue
 
-        ev_date = (fields.findtext("EV_D") or "").strip()
-        if not parse_date(ev_date):
-            continue
+            events.append({
+                "event_id": (conn.findtext("ID") or "").strip(),
+                "event_name": (conn.findtext(".//FIELDS/EV_N") or "").strip(),
+                "event_date": ev_date,
+                "event_time": (conn.findtext(".//FIELDS/EVE_HOUR") or "").strip(),
+                "location": (conn.findtext(".//FIELDS/EVE_LOC") or "").strip()
+            })
 
-        result.append({
-            "id": (card.findtext("ID") or "").strip(),
-            "name": (fields.findtext("EV_N") or "").strip(),
-            "date": ev_date,
-            "time": (fields.findtext("EVE_HOUR") or "").strip(),
-            "location": (fields.findtext("EVE_LOC") or "").strip(),
-            "order": int((fields.findtext("EVE_ORDER") or "999") or 999)
-        })
-
-    result.sort(key=lambda e: (e["order"], parse_date(e["date"])))
-    return jsonify(result)
+    events.sort(key=lambda e: parse_date(e["event_date"]))
+    return events
 
 # ======================
-# EVENTS PAGE
-# ======================
-@app.route("/events-page")
-def events_page():
-    return render_template("events.html")
-
-# ======================
-# SELECT EVENT (חדש אבל קיים אצלך ב־HTML)
+# SELECT EVENT – שלב ראשון
 # ======================
 @app.route("/select-event")
 def select_event():
@@ -114,9 +115,7 @@ def select_event():
     if not family_id:
         return "Missing family_id", 400
 
-    # כרגע דמה – כמו שהיה בעבר
-    # בהמשך יגיע מזברה
-    events = []  
+    events = get_family_events_for_confirm(family_id)
 
     return render_template(
         "select_event.html",
@@ -136,7 +135,7 @@ def confirm():
     if not family_id:
         return "Missing family_id", 400
 
-    # 🔴 זה התיקון הקריטי
+    # אם אין event_id → שלב בחירת אירוע
     if not event_id:
         return redirect(url_for("select_event", family_id=family_id))
 
