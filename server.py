@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-from flask import Flask, jsonify, render_template
+from flask import Flask, request, jsonify, render_template
 import requests
 import xml.etree.ElementTree as ET
 from datetime import datetime
@@ -13,6 +13,7 @@ app = Flask(__name__)
 ZEBRA_GET_URL = "https://25098.zebracrm.com/ext_interface.php?b=get_multi_cards_details"
 ZEBRA_USER = "IVAPP"
 ZEBRA_PASS = "1q2w3e4r"
+
 
 # ======================
 # HELPERS
@@ -30,15 +31,14 @@ def extract_cards_safe(xml_text):
         try:
             card_xml = "<CARD>" + match.group(1) + "</CARD>"
             card_xml = card_xml.replace("&", "&amp;")
-            card = ET.fromstring(card_xml)
-            cards.append(card)
+            cards.append(ET.fromstring(card_xml))
         except Exception:
             continue
     return cards
 
 
 # ======================
-# API: EVENTS (JSON)
+# EVENTS – API
 # ======================
 @app.route("/events")
 def events():
@@ -48,9 +48,7 @@ def events():
         <USERNAME>{ZEBRA_USER}</USERNAME>
         <PASSWORD>{ZEBRA_PASS}</PASSWORD>
     </PERMISSION>
-
     <CARD_TYPE_FILTER>EVEFAM</CARD_TYPE_FILTER>
-
     <FIELDS>
         <EV_N></EV_N>
         <EV_D></EV_D>
@@ -62,14 +60,14 @@ def events():
 </ROOT>
 """.strip()
 
-    response = requests.post(
+    res = requests.post(
         ZEBRA_GET_URL,
         data=xml_body.encode("utf-8"),
         headers={"Content-Type": "application/xml"},
         timeout=20
     )
 
-    raw_xml = response.text
+    raw_xml = res.text
 
     try:
         tree = ET.fromstring(raw_xml)
@@ -81,18 +79,18 @@ def events():
 
     for card in cards:
         fields = card.find("FIELDS")
-        if fields is None:
+        if not fields:
             continue
 
         if (fields.findtext("STA_EV") or "").strip() != "1":
             continue
 
         ev_date = (fields.findtext("EV_D") or "").strip()
-        parsed_date = parse_date(ev_date)
-        if not parsed_date:
+        if not parse_date(ev_date):
             continue
 
         result.append({
+            "id": (card.findtext("ID") or "").strip(),
             "name": (fields.findtext("EV_N") or "").strip(),
             "date": ev_date,
             "time": (fields.findtext("EVE_HOUR") or "").strip(),
@@ -101,16 +99,33 @@ def events():
         })
 
     result.sort(key=lambda e: (e["order"], parse_date(e["date"])))
-
     return jsonify(result)
 
 
 # ======================
-# PAGE: EVENTS HTML
+# EVENTS PAGE
 # ======================
 @app.route("/events-page")
 def events_page():
     return render_template("events.html")
+
+
+# ======================
+# CONFIRM – אישורי הגעה
+# ======================
+@app.route("/confirm")
+def confirm():
+    family_id = request.args.get("family_id", "").strip()
+    event_id = request.args.get("event_id", "").strip()
+
+    if not family_id:
+        return "Missing family_id", 400
+
+    return render_template(
+        "confirm.html",
+        family_id=family_id,
+        event_id=event_id
+    )
 
 
 # ======================
@@ -119,3 +134,7 @@ def events_page():
 @app.route("/")
 def home():
     return "HOME OK"
+
+
+if __name__ == "__main__":
+    app.run(host="0.0.0.0", port=10000)
