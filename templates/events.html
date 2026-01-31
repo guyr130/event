@@ -1,1 +1,48 @@
+<!DOCTYPE html>
+<html lang="he" dir="rtl">
+<head>
+    <meta charset="UTF-8">
+    <title>אירועים קרובים | אור למשפחות</title>
+    <link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+
+<div class="container">
+    <h1 class="page-title">האירועים הקרובים</h1>
+    <div id="events" class="cards"></div>
+</div>
+
+<script>
+fetch("/events")
+    .then(res => res.json())
+    .then(data => {
+        const container = document.getElementById("events");
+
+        if (!data.length) {
+            container.innerHTML = "<p>אין אירועים זמינים כרגע</p>";
+            return;
+        }
+
+        data.forEach(ev => {
+            const card = document.createElement("div");
+            card.className = "event-card";
+
+            card.innerHTML = `
+                <h2>${ev.name}</h2>
+                <p><strong>📅 תאריך:</strong> ${ev.date}</p>
+                <p><strong>⏰ שעה:</strong> ${ev.time}</p>
+                <p><strong>📍 מקום:</strong> ${ev.location}</p>
+            `;
+
+            container.appendChild(card);
+        });
+    })
+    .catch(() => {
+        document.getElementById("events").innerHTML =
+            "<p>שגיאה בטעינת האירועים</p>";
+    });
+</script>
+
+</body>
+</html>
 
