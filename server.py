@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-from flask import Flask, request, render_template, redirect, url_for
+from flask import Flask, request, render_template
 import requests
 import xml.etree.ElementTree as ET
 from datetime import datetime, date
@@ -96,14 +96,10 @@ def get_family_events_for_confirm(family_id):
     events = []
 
     for conn in connections:
-        prov = (conn.findtext(".//CON_FIELDS/PROV") or "").strip()
-        if prov != "1":
-            continue
-
         ev_date_raw = (conn.findtext(".//FIELDS/EV_D") or "").strip()
         ev_date = parse_date(ev_date_raw)
 
-        # סינון תאריך – היום והלאה
+        # סינון תאריך – רק היום והלאה
         if not ev_date or ev_date < today:
             continue
 
@@ -139,7 +135,6 @@ def confirm():
     # אם לא נבחר אירוע
     if not event_id:
         if len(events) == 1:
-            # אירוע אחד → מעבר ישיר לאישור
             ev = events[0]
             return render_template(
                 "confirm.html",
