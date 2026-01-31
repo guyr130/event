@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-from flask import Flask, request, jsonify, render_template
+from flask import Flask, request, jsonify, render_template, redirect, url_for
 import requests
 import xml.etree.ElementTree as ET
 from datetime import datetime
@@ -14,7 +14,6 @@ ZEBRA_GET_URL = "https://25098.zebracrm.com/ext_interface.php?b=get_multi_cards_
 ZEBRA_USER = "IVAPP"
 ZEBRA_PASS = "1q2w3e4r"
 
-
 # ======================
 # HELPERS
 # ======================
@@ -23,7 +22,6 @@ def parse_date(date_str):
         return datetime.strptime(date_str, "%d/%m/%Y").date()
     except Exception:
         return None
-
 
 def extract_cards_safe(xml_text):
     cards = []
@@ -35,7 +33,6 @@ def extract_cards_safe(xml_text):
         except Exception:
             continue
     return cards
-
 
 # ======================
 # EVENTS – API
@@ -101,7 +98,6 @@ def events():
     result.sort(key=lambda e: (e["order"], parse_date(e["date"])))
     return jsonify(result)
 
-
 # ======================
 # EVENTS PAGE
 # ======================
@@ -109,6 +105,25 @@ def events():
 def events_page():
     return render_template("events.html")
 
+# ======================
+# SELECT EVENT (חדש אבל קיים אצלך ב־HTML)
+# ======================
+@app.route("/select-event")
+def select_event():
+    family_id = request.args.get("family_id", "").strip()
+    if not family_id:
+        return "Missing family_id", 400
+
+    # כרגע דמה – כמו שהיה בעבר
+    # בהמשך יגיע מזברה
+    events = []  
+
+    return render_template(
+        "select_event.html",
+        family_id=family_id,
+        family_name="",
+        events=events
+    )
 
 # ======================
 # CONFIRM – אישורי הגעה
@@ -121,12 +136,15 @@ def confirm():
     if not family_id:
         return "Missing family_id", 400
 
+    # 🔴 זה התיקון הקריטי
+    if not event_id:
+        return redirect(url_for("select_event", family_id=family_id))
+
     return render_template(
         "confirm.html",
         family_id=family_id,
         event_id=event_id
     )
-
 
 # ======================
 # HEALTH
@@ -134,7 +152,6 @@ def confirm():
 @app.route("/")
 def home():
     return "HOME OK"
-
 
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=10000)
