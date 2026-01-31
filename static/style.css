@@ -126,3 +126,9 @@ body {
     color: #555;
     font-size: 0.95em;
 }
+/* ===== דריסה סופית – אירועים אחד מתחת לשני ===== */
+.cards {
+    display: flex !important;
+    flex-direction: column !important;
+    gap: 24px;
+}
