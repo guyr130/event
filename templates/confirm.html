@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="he">
+<html lang="he" dir="rtl">
 <head>
     <meta charset="UTF-8">
     <title>אישור הגעה</title>
@@ -10,9 +10,8 @@
     margin:0;
     padding:0;
     font-family: Arial, Helvetica, sans-serif;
-    direction: rtl;
-    text-align: center;
-    background: #ffffff;
+    background:#ffffff;
+    text-align:center;
 ">
 
 <div style="max-width:420px; margin:0 auto; padding:20px;">
@@ -25,137 +24,17 @@
 
     <h1 style="color:#0b5fa5;">אישור הגעה</h1>
 
-    <p style="font-size:18px;">
-        משפחת <strong>{{ family_name }}</strong> היקרה,
+    <p style="font-size:18px; line-height:1.6;">
+        תודה 🙏  
+        <br><br>
+        אישור ההגעה נקלט במערכת.
     </p>
 
-    <p style="font-size:17px; line-height:1.6;">
-        אושרו לכם <strong>{{ tickets }}</strong> כרטיסים לאירוע<br>
-        <strong>{{ event_name }}</strong><br>
-        בתאריך {{ event_date }}<br>
-        בשעה <strong>{{ event_time }}</strong><br>
-        במקום {{ location }}
+    <p style="font-size:16px; color:#555;">
+        ניתן לסגור את הדף.
     </p>
-
-    <p style="margin-top:20px;">בחרו כמות:</p>
-
-    <select id="qty" style="
-        padding:10px;
-        font-size:16px;
-        width:160px;
-        text-align:center;
-        margin-bottom:20px;
-    ">
-        <option value="">אנא בחרו כמות</option>
-        {% set t = (tickets | int) %}
-        {% for i in range(1, t + 1) %}
-            <option value="{{ i }}">{{ i }}</option>
-        {% endfor %}
-    </select>
-
-    <div id="statusMsg" style="font-size:16px; margin:10px 0; color:green;"></div>
-
-    <div>
-        <button id="yesBtn" onclick="sendResponse('yes')" style="
-            width:220px;
-            padding:14px;
-            font-size:16px;
-            background:#0b5fa5;
-            color:#ffffff;
-            border:none;
-            border-radius:6px;
-            margin-bottom:12px;
-            cursor:pointer;
-        ">
-            מגיעים
-        </button>
-
-        <br>
-
-        <button id="noBtn" onclick="sendResponse('no')" style="
-            width:220px;
-            padding:14px;
-            font-size:16px;
-            background:#f28c28;
-            color:#ffffff;
-            border:none;
-            border-radius:6px;
-            cursor:pointer;
-        ">
-            לא מגיעים
-        </button>
-    </div>
 
 </div>
-
-<script>
-let alreadySent = false;
-
-function lockUI(message) {
-    document.getElementById("yesBtn").disabled = true;
-    document.getElementById("noBtn").disabled = true;
-    document.getElementById("yesBtn").style.opacity = 0.6;
-    document.getElementById("noBtn").style.opacity = 0.6;
-    document.getElementById("statusMsg").innerText = message;
-}
-
-function unlockUI(message) {
-    alreadySent = false;
-    document.getElementById("yesBtn").disabled = false;
-    document.getElementById("noBtn").disabled = false;
-    document.getElementById("yesBtn").style.opacity = 1;
-    document.getElementById("noBtn").style.opacity = 1;
-    document.getElementById("statusMsg").innerText = message;
-}
-
-function sendResponse(status) {
-
-    if (alreadySent) return;
-    alreadySent = true;
-
-    const qtySelect = document.getElementById("qty");
-    let qty = qtySelect.value;
-
-    if (status === "yes" && !qty) {
-        alert("אנא בחרו כמות כרטיסים");
-        alreadySent = false;
-        return;
-    }
-
-    if (status === "no") {
-        qty = 0;
-    }
-
-    lockUI("האישור נשלח, אנא המתינו…");
-
-    fetch("/submit", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-            event_id: "{{ event_id }}",
-            family_id: "{{ family_id }}",
-            family_name: "{{ family_name }}",
-            event_name: "{{ event_name }}",
-            status: status,
-            tickets: qty
-        })
-    })
-    .then(res => {
-        if (!res.ok) throw new Error("Server error");
-        return res.json();
-    })
-    .then(() => {
-        window.location.href =
-          "/thanks?status=" + status +
-          "&qty=" + qty +
-          "&event_id={{ event_id }}" +
-          "&family_id={{ family_id }}";
-    })
-    .catch(() => {
-        unlockUI("אירעה שגיאה בשליחה, אנא נסו שוב");
-    });
-}
-</script>
 
 </body>
 </html>
