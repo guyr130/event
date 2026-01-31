@@ -61,14 +61,68 @@ def parse_ddmmyyyy(date_str: str):
         return None
 
 
+# =========================================================
+# NEW: EVENTS LIST (שליפת אירועים פעילים בלבד)
+# =========================================================
+@app.route("/events")
+def events():
+    xml_body = f"""
+<ROOT>
+    <PERMISSION>
+        <USERNAME>{ZEBRA_USER}</USERNAME>
+        <PASSWORD>{ZEBRA_PASS}</PASSWORD>
+    </PERMISSION>
+
+    <CARD_TYPE_FILTER>EVEFAM</CARD_TYPE_FILTER>
+
+    <FIELDS>
+        <EV_N></EV_N>
+        <EV_D></EV_D>
+        <EVE_HOUR></EVE_HOUR>
+        <EVE_LOC></EVE_LOC>
+        <EVE_ORDER></EVE_ORDER>
+        <STA_EV></STA_EV>
+    </FIELDS>
+</ROOT>
+""".strip()
+
+    response = zebra_post(xml_body)
+    tree = ET.fromstring(response)
+
+    cards = tree.findall(".//CARD")
+    result = []
+
+    for card in cards:
+        fields = card.find("FIELDS")
+        if fields is None:
+            continue
+
+        if fields.findtext("STA_EV", "").strip() != "1":
+            continue
+
+        event = {
+            "event_id": card.findtext("ID", "").strip(),
+            "event_name": fields.findtext("EV_N", "").strip(),
+            "event_date": fields.findtext("EV_D", "").strip(),
+            "event_time": fields.findtext("EVE_HOUR", "").strip(),
+            "location": fields.findtext("EVE_LOC", "").strip(),
+            "order": int(fields.findtext("EVE_ORDER", "9999"))
+        }
+
+        result.append(event)
+
+    def sort_key(e):
+        d = parse_ddmmyyyy(e["event_date"]) or datetime.max.date()
+        return (e["order"], d)
+
+    result.sort(key=sort_key)
+    return jsonify(result)
+
+
+# ======================
+# FAMILY EVENTS (אישורי הגעה – קיים)
+# ======================
 def get_family_events(family_id: str):
-    """
-    מחזיר:
-    {
-      family_id, family_name,
-      events: [{event_id,event_name,event_date,event_time,location,tickets,prov}, ...]
-    }
-    """
     xml_body = f"""
 <ROOT>
     <PERMISSION>
@@ -151,11 +205,6 @@ def get_family_events(family_id: str):
 
 
 def filter_events(events):
-    """
-    שני תנאים:
-    1) מאושר (PROV == "1")
-    2) תאריך היום ובעתיד
-    """
     today = datetime.today().date()
     valid = []
 
@@ -164,26 +213,21 @@ def filter_events(events):
             continue
 
         d = parse_ddmmyyyy(ev.get("event_date", ""))
-        if not d:
-            continue
-
-        if d < today:
+        if not d or d < today:
             continue
 
         valid.append(ev)
 
-    # מיון לפי תאריך ואז שעה
-    def sort_key(x):
-        d = parse_ddmmyyyy(x.get("event_date", "")) or today
-        t = (x.get("event_time") or "00:00").strip()
-        return (d, t)
+    valid.sort(key=lambda x: (
+        parse_ddmmyyyy(x.get("event_date", "")) or today,
+        x.get("event_time", "00:00")
+    ))
 
-    valid.sort(key=sort_key)
     return valid
 
 
 # ======================
-# CONFIRM (כניסה עם family_id)
+# CONFIRM
 # ======================
 @app.route("/confirm")
 def confirm():
@@ -200,53 +244,25 @@ def confirm():
     family_name = fam["family_name"]
     valid_events = filter_events(fam["events"])
 
-    # אם אין event_id -> מצב רשימת אירועים
     if not event_id:
         if len(valid_events) == 0:
             return "אין אירועים זמינים למשפחה זו", 404
 
         if len(valid_events) == 1:
             ev = valid_events[0]
-            return render_template(
-                "confirm.html",
-                family_id=family_id,
-                family_name=family_name,
-                event_id=ev["event_id"],
-                event_name=ev["event_name"],
-                event_date=ev["event_date"],
-                event_time=ev["event_time"],
-                location=ev["location"],
-                tickets=ev["tickets"]
-            )
+            return render_template("confirm.html", family_id=family_id, family_name=family_name, **ev)
 
-        # יותר מאחד -> דף בחירה
-        return render_template(
-            "select_event.html",
-            family_id=family_id,
-            family_name=family_name,
-            events=valid_events
-        )
+        return render_template("select_event.html", family_id=family_id, family_name=family_name, events=valid_events)
 
-    # אם יש event_id -> להציג אירוע ספציפי
-    chosen = next((e for e in valid_events if str(e.get("event_id", "")).strip() == event_id), None)
+    chosen = next((e for e in valid_events if e["event_id"] == event_id), None)
     if not chosen:
         return "האירוע לא נמצא / לא מאושר / תאריך עבר", 404
 
-    return render_template(
-        "confirm.html",
-        family_id=family_id,
-        family_name=family_name,
-        event_id=chosen["event_id"],
-        event_name=chosen["event_name"],
-        event_date=chosen["event_date"],
-        event_time=chosen["event_time"],
-        location=chosen["location"],
-        tickets=chosen["tickets"]
-    )
+    return render_template("confirm.html", family_id=family_id, family_name=family_name, **chosen)
 
 
 # ======================
-# SUBMIT -> שולח לשיט
+# SUBMIT
 # ======================
 @app.route("/submit", methods=["POST"])
 def submit():
@@ -254,7 +270,7 @@ def submit():
 
     event_id = str(data.get("event_id") or "").strip()
     family_id = str(data.get("family_id") or "").strip()
-    status = str(data.get("status") or "").strip()  # yes/no
+    status = str(data.get("status") or "").strip()
     tickets = int(data.get("tickets", 0) or 0)
 
     family_name = str(data.get("family_name") or "").strip()
@@ -263,13 +279,10 @@ def submit():
     if not event_id or not family_id or status not in ("yes", "no"):
         return jsonify({"success": False, "error": "Missing parameters"}), 400
 
-    # anti double click
     if is_duplicate(event_id, family_id, status, tickets):
         return jsonify({"success": True, "duplicate": True})
 
-    # timestamp (Israel local time according to server env; Apps Script will log as received)
     timestamp = datetime.now().strftime("%d/%m/%Y %H:%M:%S")
-
     status_he = "אישרו" if status == "yes" else "ביטלו"
     if status == "no":
         tickets = 0
@@ -285,36 +298,20 @@ def submit():
     }
 
     try:
-        r = requests.post(
-            GOOGLE_SHEETS_WEBAPP_URL,
-            json=payload,  # חשוב! כדי שלא יהפוך ל-?????
-            timeout=20
-        )
-        # גם אם Apps Script מחזיר success true/false - אנחנו מחזירים את זה החוצה
-        return jsonify({
-            "success": True,
-            "google_status": r.status_code,
-            "google_body": (r.text or "")[:400]
-        })
+        r = requests.post(GOOGLE_SHEETS_WEBAPP_URL, json=payload, timeout=20)
+        return jsonify({"success": True, "google_status": r.status_code})
     except Exception as e:
         return jsonify({"success": False, "error": str(e)}), 500
 
 
 # ======================
-# THANKS (עיצוב מתוך templates/thanks.html)
+# THANKS + HEALTH
 # ======================
 @app.route("/thanks")
 def thanks():
-    status = request.args.get("status", "")
-    qty = request.args.get("qty", "0")
-    event_id = request.args.get("event_id", "")
-    family_id = request.args.get("family_id", "")
-    return render_template("thanks.html", status=status, qty=qty, event_id=event_id, family_id=family_id)
+    return render_template("thanks.html")
 
 
-# ======================
-# HEALTH
-# ======================
 @app.route("/")
 def home():
     return "Server is alive"
