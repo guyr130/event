@@ -7,9 +7,6 @@ import re
 
 app = Flask(__name__)
 
-# ======================
-# ZEBRA CONFIG
-# ======================
 ZEBRA_GET_URL = "https://25098.zebracrm.com/ext_interface.php?b=get_multi_cards_details"
 ZEBRA_USER = "IVAPP"
 ZEBRA_PASS = "1q2w3e4r"
@@ -18,17 +15,6 @@ ZEBRA_PASS = "1q2w3e4r"
 # ======================
 # HELPERS
 # ======================
-def clean_xml(text: str) -> str:
-    """
-    מנקה תווים לא חוקיים ל-XML (בעיה מוכרת בזברה)
-    """
-    if not text:
-        return ""
-    # הסרת תווי בקרה לא חוקיים
-    text = re.sub(r"[\x00-\x08\x0B\x0C\x0E-\x1F]", "", text)
-    return text
-
-
 def parse_date(d):
     try:
         return datetime.strptime(d, "%d/%m/%Y").date()
@@ -36,8 +22,24 @@ def parse_date(d):
         return None
 
 
+def extract_cards_safe(xml_text: str):
+    """
+    חילוץ CARDים גם אם ה-XML הכללי שבור
+    """
+    cards = []
+    for match in re.finditer(r"<CARD>(.*?)</CARD>", xml_text, re.DOTALL):
+        try:
+            card_xml = "<CARD>" + match.group(1) + "</CARD>"
+            card_xml = card_xml.replace("&", "&amp;")  # תיקון קריטי
+            card = ET.fromstring(card_xml)
+            cards.append(card)
+        except Exception:
+            continue
+    return cards
+
+
 # ======================
-# EVENTS – רשימת אירועים
+# EVENTS
 # ======================
 @app.route("/events")
 def events():
@@ -68,14 +70,19 @@ def events():
         timeout=20
     )
 
-    # 🔴 ניקוי XML לפני parsing
-    clean_response = clean_xml(r.text)
+    raw_xml = r.text
 
-    tree = ET.fromstring(clean_response)
+    # ניסיון רגיל
+    try:
+        tree = ET.fromstring(raw_xml)
+        cards = tree.findall(".//CARD")
+    except Exception:
+        # fallback חסין
+        cards = extract_cards_safe(raw_xml)
 
     events = []
 
-    for card in tree.findall(".//CARD"):
+    for card in cards:
         f = card.find("FIELDS")
         if f is None:
             continue
@@ -84,8 +91,8 @@ def events():
             continue
 
         ev_date = (f.findtext("EV_D") or "").strip()
-        parsed_date = parse_date(ev_date)
-        if not parsed_date:
+        d = parse_date(ev_date)
+        if not d:
             continue
 
         events.append({
@@ -94,18 +101,15 @@ def events():
             "date": ev_date,
             "time": (f.findtext("EVE_HOUR") or "").strip(),
             "location": (f.findtext("EVE_LOC") or "").strip(),
-            "order": int((f.findtext("EVE_ORDER") or "999").strip() or 999)
+            "order": int((f.findtext("EVE_ORDER") or "999") or 999)
         })
 
-    # מיון: קודם סדר הצגה, ואז תאריך
+    # מיון: סדר הצגה ואז תאריך
     events.sort(key=lambda e: (e["order"], parse_date(e["date"])))
 
     return jsonify(events)
 
 
-# ======================
-# HEALTH
-# ======================
 @app.route("/")
 def home():
     return "Server is alive"
