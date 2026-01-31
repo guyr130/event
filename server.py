@@ -122,6 +122,11 @@ def events():
 def home():
     return "Server is alive"
 
+from flask import render_template
+
+@app.route("/events-page")
+def events_page():
+    return render_template("events.html")
 
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=10000)
