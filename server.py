@@ -14,7 +14,6 @@ ZEBRA_GET_URL = "https://25098.zebracrm.com/ext_interface.php?b=get_multi_cards_
 ZEBRA_USER = "IVAPP"
 ZEBRA_PASS = "1q2w3e4r"
 
-
 # ======================
 # HELPERS
 # ======================
@@ -26,9 +25,6 @@ def parse_date(date_str):
 
 
 def extract_cards_safe(xml_text):
-    """
-    חילוץ <CARD> גם אם ה-XML הכללי שבור (בעיה ידועה בזברה)
-    """
     cards = []
     for match in re.finditer(r"<CARD>(.*?)</CARD>", xml_text, re.DOTALL):
         try:
@@ -42,13 +38,8 @@ def extract_cards_safe(xml_text):
 
 
 # ======================
-# ROUTES
+# API: EVENTS (JSON)
 # ======================
-@app.route("/")
-def home():
-    return "HOME OK"
-
-
 @app.route("/events")
 def events():
     xml_body = f"""
@@ -102,7 +93,6 @@ def events():
             continue
 
         result.append({
-            "id": (card.findtext("ID") or "").strip(),
             "name": (fields.findtext("EV_N") or "").strip(),
             "date": ev_date,
             "time": (fields.findtext("EVE_HOUR") or "").strip(),
@@ -111,16 +101,21 @@ def events():
         })
 
     result.sort(key=lambda e: (e["order"], parse_date(e["date"])))
+
     return jsonify(result)
 
 
+# ======================
+# PAGE: EVENTS HTML
+# ======================
 @app.route("/events-page")
 def events_page():
     return render_template("events.html")
 
 
 # ======================
-# LOCAL RUN (ignored by Render)
+# HEALTH
 # ======================
-if __name__ == "__main__":
-    app.run(host="0.0.0.0", port=10000)
+@app.route("/")
+def home():
+    return "HOME OK"
