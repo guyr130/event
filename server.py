@@ -1,5 +1,6 @@
 # -*- coding: utf-8 -*-
-from flask import Flask, jsonify
+
+from flask import Flask, jsonify, render_template
 import requests
 import xml.etree.ElementTree as ET
 from datetime import datetime
@@ -33,7 +34,6 @@ def extract_cards_safe(xml_text):
     for match in re.finditer(r"<CARD>(.*?)</CARD>", xml_text, re.DOTALL):
         try:
             card_xml = "<CARD>" + match.group(1) + "</CARD>"
-            # תיקון קריטי: & לא חוקי
             card_xml = card_xml.replace("&", "&amp;")
             card = ET.fromstring(card_xml)
             cards.append(card)
@@ -76,12 +76,10 @@ def events():
 
     raw_xml = response.text
 
-    # ניסיון parsing רגיל
     try:
         tree = ET.fromstring(raw_xml)
         cards = tree.findall(".//CARD")
     except Exception:
-        # fallback ל-XML שבור
         cards = extract_cards_safe(raw_xml)
 
     result = []
@@ -91,13 +89,11 @@ def events():
         if fields is None:
             continue
 
-        # רק אירועים פעילים
         if (fields.findtext("STA_EV") or "").strip() != "1":
             continue
 
         ev_date = (fields.findtext("EV_D") or "").strip()
-        parsed_date = parse_date(ev_date)
-        if not parsed_date:
+        if not parse_date(ev_date):
             continue
 
         result.append({
@@ -109,10 +105,24 @@ def events():
             "order": int((fields.findtext("EVE_ORDER") or "999") or 999)
         })
 
-    # מיון: קודם סדר הצגה, ואז תאריך
     result.sort(key=lambda e: (e["order"], parse_date(e["date"])))
-
     return jsonify(result)
+
+
+# ======================
+# EVENTS PAGE (HTML)
+# ======================
+@app.route("/events-page", strict_slashes=False)
+def events_page():
+    return render_template("events.html")
+
+
+# ======================
+# TEST ROUTE (בדיקת אמת)
+# ======================
+@app.route("/test")
+def test():
+    return "TEST OK"
 
 
 # ======================
@@ -122,10 +132,9 @@ def events():
 def home():
     return "Server is alive"
 
-from flask import render_template
 
-from flask import render_template
-
-@app.route("/events-page", strict_slashes=False)
-def events_page():
-    return render_template("events.html")
+# ======================
+# MAIN
+# ======================
+if __name__ == "__main__":
+    app.run(host="0.0.0.0", port=10000)
