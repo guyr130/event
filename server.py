@@ -2,7 +2,7 @@
 from flask import Flask, request, render_template
 import requests
 import xml.etree.ElementTree as ET
-from datetime import datetime, date
+from datetime import datetime
 import re
 
 app = Flask(__name__)
@@ -17,17 +17,7 @@ ZEBRA_PASS = "1q2w3e4r"
 # ======================
 # HELPERS
 # ======================
-def parse_date(date_str):
-    try:
-        return datetime.strptime(date_str, "%d/%m/%Y").date()
-    except Exception:
-        return None
-
-
 def extract_cards_safe(xml_text):
-    """
-    חילוץ CARD_CONNECTION גם אם ה־XML הכללי שבור
-    """
     cards = []
     for match in re.finditer(r"<CARD_CONNECTION_.*?>.*?</CARD_CONNECTION_.*?>", xml_text, re.DOTALL):
         try:
@@ -37,9 +27,8 @@ def extract_cards_safe(xml_text):
             continue
     return cards
 
-
 # ======================
-# שליפת אירועים למשפחה – אישורי הגעה
+# שליפת אירועים למשפחה – מצב בטוח
 # ======================
 def get_family_events_for_confirm(family_id):
     xml_body = f"""
@@ -50,17 +39,11 @@ def get_family_events_for_confirm(family_id):
     </PERMISSION>
 
     <CARD_TYPE>business_customer</CARD_TYPE>
-
-    <FIELDS>
-        <ID></ID>
-    </FIELDS>
-
     <ID_FILTER>{family_id}</ID_FILTER>
 
     <CONNECTION_CARDS>
         <CONNECTION_CARD>
             <CONNECTION_KEY>ASKEV</CONNECTION_KEY>
-
             <FIELDS>
                 <ID></ID>
                 <EV_N></EV_N>
@@ -68,10 +51,6 @@ def get_family_events_for_confirm(family_id):
                 <EVE_HOUR></EVE_HOUR>
                 <EVE_LOC></EVE_LOC>
             </FIELDS>
-
-            <CON_FIELDS>
-                <PROV></PROV>
-            </CON_FIELDS>
         </CONNECTION_CARD>
     </CONNECTION_CARDS>
 </ROOT>
@@ -92,32 +71,20 @@ def get_family_events_for_confirm(family_id):
     except Exception:
         connections = extract_cards_safe(raw_xml)
 
-    today = date.today()
     events = []
-
     for conn in connections:
-        ev_date_raw = (conn.findtext(".//FIELDS/EV_D") or "").strip()
-        ev_date = parse_date(ev_date_raw)
-
-        # סינון תאריך – רק היום והלאה
-        if not ev_date or ev_date < today:
-            continue
-
         events.append({
             "event_id": (conn.findtext("ID") or "").strip(),
             "event_name": (conn.findtext(".//FIELDS/EV_N") or "").strip(),
-            "event_date": ev_date_raw,
+            "event_date": (conn.findtext(".//FIELDS/EV_D") or "").strip(),
             "event_time": (conn.findtext(".//FIELDS/EVE_HOUR") or "").strip(),
             "location": (conn.findtext(".//FIELDS/EVE_LOC") or "").strip()
         })
 
-    # מיון לפי תאריך
-    events.sort(key=lambda e: parse_date(e["event_date"]))
     return events
 
-
 # ======================
-# CONFIRM – נקודת כניסה לאישורי הגעה
+# CONFIRM
 # ======================
 @app.route("/confirm")
 def confirm():
@@ -132,7 +99,6 @@ def confirm():
     if not events:
         return "אין אירועים זמינים לאישור הגעה", 404
 
-    # אם לא נבחר אירוע
     if not event_id:
         if len(events) == 1:
             ev = events[0]
@@ -146,8 +112,6 @@ def confirm():
                 location=ev["location"],
                 tickets=0
             )
-
-        # יותר מאירוע אחד → בחירת אירוע
         return render_template(
             "select_event.html",
             family_id=family_id,
@@ -155,7 +119,6 @@ def confirm():
             events=events
         )
 
-    # יש event_id → מציגים אישור הגעה
     chosen = next((e for e in events if e["event_id"] == event_id), None)
     if not chosen:
         return "האירוע לא נמצא או לא זמין", 404
@@ -171,14 +134,9 @@ def confirm():
         tickets=0
     )
 
-
-# ======================
-# HEALTH
-# ======================
 @app.route("/")
 def home():
     return "HOME OK"
-
 
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=10000)
