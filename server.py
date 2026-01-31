@@ -124,9 +124,8 @@ def home():
 
 from flask import render_template
 
-@app.route("/events-page")
+from flask import render_template
+
+@app.route("/events-page", strict_slashes=False)
 def events_page():
     return render_template("events.html")
-
-if __name__ == "__main__":
-    app.run(host="0.0.0.0", port=10000)
