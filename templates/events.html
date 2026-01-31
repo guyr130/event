@@ -2,13 +2,14 @@
 <html lang="he" dir="rtl">
 <head>
     <meta charset="UTF-8">
-    <title>אירועים קרובים | אור למשפחות</title>
+    <title>האירועים הקרובים | אור למשפחות</title>
     <link rel="stylesheet" href="/static/style.css">
 </head>
 <body>
 
 <div class="container">
     <h1 class="page-title">האירועים הקרובים</h1>
+
     <div id="events" class="cards"></div>
 </div>
 
@@ -32,6 +33,12 @@ fetch("/events")
                 <p><strong>📅 תאריך:</strong> ${ev.date}</p>
                 <p><strong>⏰ שעה:</strong> ${ev.time}</p>
                 <p><strong>📍 מקום:</strong> ${ev.location}</p>
+
+                <div class="register-wrap">
+                    <a class="register-btn" href="#">
+                        להרשמה לאירוע
+                    </a>
+                </div>
             `;
 
             container.appendChild(card);
@@ -45,4 +52,3 @@ fetch("/events")
 
 </body>
 </html>
-
