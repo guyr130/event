@@ -109,3 +109,34 @@ def confirm():
         return render_template(
             "select_event.html",
             family_id=family_id,
+            events=[],
+            message="אין אירועים מאושרים לאישור הגעה"
+        )
+
+    if not event_id:
+        return render_template(
+            "select_event.html",
+            family_id=family_id,
+            events=events
+        )
+
+    chosen = next((e for e in events if e["event_id"] == event_id), None)
+    if not chosen:
+        return "האירוע לא נמצא", 404
+
+    return render_template(
+        "confirm.html",
+        family_id=family_id,
+        event_id=chosen["event_id"],
+        event_name=chosen["event_name"],
+        event_date=chosen["event_date"],
+        event_time=chosen["event_time"],
+        location=chosen["location"]
+    )
+
+@app.route("/")
+def home():
+    return "SERVER OK"
+
+if __name__ == "__main__":
+    app.run(host="0.0.0.0", port=10000)
