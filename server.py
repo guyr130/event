@@ -6,19 +6,29 @@ import re
 
 app = Flask(__name__)
 
+# ======================
+# ZEBRA CONFIG
+# ======================
 ZEBRA_GET_URL = "https://25098.zebracrm.com/ext_interface.php?b=get_multi_cards_details"
 ZEBRA_USER = "IVAPP"
 ZEBRA_PASS = "1q2w3e4r"
 
+# ======================
+# HELPERS
+# ======================
 def extract_cards_safe(xml_text):
     cards = []
     for match in re.finditer(r"<CARD_CONNECTION_.*?>.*?</CARD_CONNECTION_.*?>", xml_text, re.DOTALL):
         try:
-            cards.append(ET.fromstring(match.group(0).replace("&", "&amp;")))
+            card_xml = match.group(0).replace("&", "&amp;")
+            cards.append(ET.fromstring(card_xml))
         except Exception:
             continue
     return cards
 
+# ======================
+# שליפת אירועים למשפחה – עם הדפסת XML ללוג
+# ======================
 def get_family_events_for_confirm(family_id):
     xml_body = f"""
 <ROOT>
@@ -54,9 +64,18 @@ def get_family_events_for_confirm(family_id):
             timeout=20
         )
         raw_xml = res.text
-    except Exception:
+    except Exception as e:
+        print("ZEBRA REQUEST FAILED:", e)
         return []
 
+    # ===== הדפסה ללוג =====
+    print("==== RAW ZEBRA XML ====")
+    print(raw_xml)
+    print("==== END XML ====")
+
+    # ======================
+    # PARSE XML
+    # ======================
     try:
         tree = ET.fromstring(raw_xml)
         connections = [
@@ -78,6 +97,9 @@ def get_family_events_for_confirm(family_id):
 
     return events
 
+# ======================
+# CONFIRM
+# ======================
 @app.route("/confirm")
 def confirm():
     family_id = request.args.get("family_id", "").strip()
