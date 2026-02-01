@@ -6,29 +6,19 @@ import re
 
 app = Flask(__name__)
 
-# ======================
-# ZEBRA CONFIG
-# ======================
 ZEBRA_GET_URL = "https://25098.zebracrm.com/ext_interface.php?b=get_multi_cards_details"
 ZEBRA_USER = "IVAPP"
 ZEBRA_PASS = "1q2w3e4r"
 
-# ======================
-# HELPERS
-# ======================
 def extract_cards_safe(xml_text):
     cards = []
     for match in re.finditer(r"<CARD_CONNECTION_.*?>.*?</CARD_CONNECTION_.*?>", xml_text, re.DOTALL):
         try:
-            card_xml = match.group(0).replace("&", "&amp;")
-            cards.append(ET.fromstring(card_xml))
+            cards.append(ET.fromstring(match.group(0).replace("&", "&amp;")))
         except Exception:
             continue
     return cards
 
-# ======================
-# שליפת אירועים למשפחה – גרסה חסינה + XPath מתוקן
-# ======================
 def get_family_events_for_confirm(family_id):
     xml_body = f"""
 <ROOT>
@@ -43,18 +33,16 @@ def get_family_events_for_confirm(family_id):
         <ID>{family_id}</ID>
     </ID_FILTER>
 
-    <CONNECTION_CARDS>
-        <CONNECTION_CARD>
-            <CONNECTION_KEY>ASKEV</CONNECTION_KEY>
-            <FIELDS>
-                <ID></ID>
-                <EV_N></EV_N>
-                <EV_D></EV_D>
-                <EVE_HOUR></EVE_HOUR>
-                <EVE_LOC></EVE_LOC>
-            </FIELDS>
-        </CONNECTION_CARD>
-    </CONNECTION_CARDS>
+    <CONNECTION_CARD_DETAILS>
+        <CONNECTION_KEY>ASKEV</CONNECTION_KEY>
+        <FIELDS>
+            <ID></ID>
+            <EV_N></EV_N>
+            <EV_D></EV_D>
+            <EVE_HOUR></EVE_HOUR>
+            <EVE_LOC></EVE_LOC>
+        </FIELDS>
+    </CONNECTION_CARD_DETAILS>
 </ROOT>
 """.strip()
 
@@ -69,9 +57,6 @@ def get_family_events_for_confirm(family_id):
     except Exception:
         return []
 
-    # ======================
-    # PARSE XML – בלי wildcard (ElementTree לא תומך בזה)
-    # ======================
     try:
         tree = ET.fromstring(raw_xml)
         connections = [
@@ -93,9 +78,6 @@ def get_family_events_for_confirm(family_id):
 
     return events
 
-# ======================
-# CONFIRM
-# ======================
 @app.route("/confirm")
 def confirm():
     family_id = request.args.get("family_id", "").strip()
