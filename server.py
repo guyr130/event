@@ -23,20 +23,10 @@ def parse_date_safe(date_str):
     except Exception:
         return None
 
-def extract_cards_safe(xml_text):
-    cards = []
-    for match in re.finditer(r"<CARD_CONNECTION_.*?>.*?</CARD_CONNECTION_.*?>", xml_text, re.DOTALL):
-        try:
-            card_xml = match.group(0).replace("&", "&amp;")
-            cards.append(ET.fromstring(card_xml))
-        except Exception:
-            continue
-    return cards
-
 # ======================
-# שליפת אירועים למשפחה + סינון PROV=1 ותאריך עתידי
+# שליפת אירועים למשפחה
 # ======================
-def get_family_events_for_confirm(family_id):
+def get_family_events(family_id):
     xml_body = f"""
 <ROOT>
     <PERMISSION>
@@ -48,7 +38,6 @@ def get_family_events_for_confirm(family_id):
 
     <ID_FILTER>{family_id}</ID_FILTER>
 
-    <!-- פוקוס חובה -->
     <FIELDS>
         <FIELD>F_NAME</FIELD>
     </FIELDS>
@@ -78,47 +67,37 @@ def get_family_events_for_confirm(family_id):
         timeout=20
     )
 
-    raw_xml = res.text
+    tree = ET.fromstring(res.text)
     today = datetime.today().date()
 
-    # ======================
-    # PARSE XML
-    # ======================
-    try:
-        tree = ET.fromstring(raw_xml)
-        conn_containers = tree.findall(".//CONNECTIONS_CARDS")
-        connections = []
-        for container in conn_containers:
-            for child in container:
-                if child.tag.startswith("CARD_CONNECTION_"):
-                    connections.append(child)
-    except Exception:
-        connections = extract_cards_safe(raw_xml)
-
     events = []
-    for conn in connections:
-        prov = (conn.findtext(".//CON_FIELDS/PROV") or "").strip()
-        ev_date_raw = (conn.findtext(".//FIELDS/EV_D") or "").strip()
-        ev_date = parse_date_safe(ev_date_raw)
 
-        # === סינון לפי החלטה ב׳ ===
-        if prov != "1":
-            continue
-        if not ev_date or ev_date < today:
-            continue
+    for container in tree.findall(".//CONNECTIONS_CARDS"):
+        for conn in container:
+            if not conn.tag.startswith("CARD_CONNECTION_"):
+                continue
 
-        events.append({
-            "event_id": (conn.findtext("ID") or "").strip(),
-            "event_name": (conn.findtext(".//FIELDS/EV_N") or "").strip(),
-            "event_date": ev_date_raw,
-            "event_time": (conn.findtext(".//FIELDS/EVE_HOUR") or "").strip(),
-            "location": (conn.findtext(".//FIELDS/EVE_LOC") or "").strip()
-        })
+            prov = (conn.findtext(".//CON_FIELDS/PROV") or "").strip()
+            date_raw = (conn.findtext(".//FIELDS/EV_D") or "").strip()
+            date_obj = parse_date_safe(date_raw)
+
+            if prov != "1":
+                continue
+            if not date_obj or date_obj < today:
+                continue
+
+            events.append({
+                "event_id": conn.findtext("ID"),
+                "event_name": conn.findtext(".//FIELDS/EV_N"),
+                "event_date": date_raw,
+                "event_time": conn.findtext(".//FIELDS/EVE_HOUR"),
+                "location": conn.findtext(".//FIELDS/EVE_LOC"),
+            })
 
     return events
 
 # ======================
-# CONFIRM
+# ROUTES
 # ======================
 @app.route("/confirm")
 def confirm():
@@ -128,35 +107,23 @@ def confirm():
     if not family_id:
         return "Missing family_id", 400
 
-    events = get_family_events_for_confirm(family_id)
+    events = get_family_events(family_id)
 
     if not events:
-        return "אין אירועים מאושרים זמינים לאישור הגעה", 404
+        return "אין אירועים זמינים", 404
 
+    # שלב 1 – תמיד הצגת רשימת אירועים
     if not event_id:
-        if len(events) == 1:
-            ev = events[0]
-            return render_template(
-                "confirm.html",
-                family_id=family_id,
-                event_id=ev["event_id"],
-                event_name=ev["event_name"],
-                event_date=ev["event_date"],
-                event_time=ev["event_time"],
-                location=ev["location"],
-                tickets=0
-            )
-
         return render_template(
             "select_event.html",
             family_id=family_id,
-            family_name="",
             events=events
         )
 
+    # שלב 2 – אישור הגעה לאירוע שנבחר
     chosen = next((e for e in events if e["event_id"] == event_id), None)
     if not chosen:
-        return "האירוע לא נמצא או לא זמין", 404
+        return "האירוע לא נמצא", 404
 
     return render_template(
         "confirm.html",
@@ -165,13 +132,12 @@ def confirm():
         event_name=chosen["event_name"],
         event_date=chosen["event_date"],
         event_time=chosen["event_time"],
-        location=chosen["location"],
-        tickets=0
+        location=chosen["location"]
     )
 
 @app.route("/")
 def home():
-    return "HOME OK"
+    return "SERVER OK"
 
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=10000)
