@@ -2,7 +2,6 @@
 from flask import Flask, request, render_template
 import requests
 import xml.etree.ElementTree as ET
-from datetime import datetime
 import re
 
 app = Flask(__name__)
@@ -28,7 +27,7 @@ def extract_cards_safe(xml_text):
     return cards
 
 # ======================
-# שליפת אירועים למשפחה – מצב בטוח
+# שליפת אירועים למשפחה – גרסה חסינה
 # ======================
 def get_family_events_for_confirm(family_id):
     xml_body = f"""
@@ -39,7 +38,10 @@ def get_family_events_for_confirm(family_id):
     </PERMISSION>
 
     <CARD_TYPE>business_customer</CARD_TYPE>
-    <ID_FILTER>{family_id}</ID_FILTER>
+
+    <ID_FILTER>
+        <ID>{family_id}</ID>
+    </ID_FILTER>
 
     <CONNECTION_CARDS>
         <CONNECTION_CARD>
@@ -56,14 +58,16 @@ def get_family_events_for_confirm(family_id):
 </ROOT>
 """.strip()
 
-    res = requests.post(
-        ZEBRA_GET_URL,
-        data=xml_body.encode("utf-8"),
-        headers={"Content-Type": "application/xml"},
-        timeout=20
-    )
-
-    raw_xml = res.text
+    try:
+        res = requests.post(
+            ZEBRA_GET_URL,
+            data=xml_body.encode("utf-8"),
+            headers={"Content-Type": "application/xml"},
+            timeout=20
+        )
+        raw_xml = res.text
+    except Exception:
+        return []
 
     try:
         tree = ET.fromstring(raw_xml)
