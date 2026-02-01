@@ -16,6 +16,7 @@
 
 <div style="max-width:420px; margin:0 auto; padding:20px;">
 
+    <!-- לוגו -->
     <img
         src="https://www.or4family.org.il/wp-content/uploads/2025/11/logo-1.png"
         alt="לוגו אור למשפחות"
@@ -24,42 +25,75 @@
 
     <h1 style="color:#0b5fa5;">אישור הגעה</h1>
 
-    <p style="font-size:17px; line-height:1.6;">
+    <!-- פרטי האירוע -->
+    <div style="
+        background:#f4f6f8;
+        border-radius:10px;
+        padding:16px;
+        margin-bottom:20px;
+        text-align:right;
+    ">
+        <div style="font-size:18px; font-weight:bold; margin-bottom:8px;">
+            {{ event_name }}
+        </div>
+
+        <div style="font-size:15px; margin-bottom:4px;">
+            📅 תאריך: {{ event_date }}
+        </div>
+
+        {% if event_time %}
+        <div style="font-size:15px; margin-bottom:4px;">
+            ⏰ שעה: {{ event_time }}
+        </div>
+        {% endif %}
+
+        {% if location %}
+        <div style="font-size:15px;">
+            📍 {{ location }}
+        </div>
+        {% endif %}
+    </div>
+
+    <p style="font-size:16px; line-height:1.6;">
         אנא אשרו את הגעתכם לאירוע
     </p>
 
-    <p style="font-size:16px; color:#555;">
+    <p style="font-size:15px; color:#555;">
         בשלב זה – אישור בלבד  
-        (בחירת אירוע ורישום ייפתחו בהמשך)
+        (בחירת אירוח ורישום ייפתחו בהמשך)
     </p>
 
+    <!-- כפתורים -->
     <div style="margin-top:30px;">
-        <button style="
+        <a href="#"
+           style="
+            display:block;
             width:220px;
+            margin:0 auto 12px auto;
             padding:14px;
             font-size:16px;
             background:#0b5fa5;
             color:#ffffff;
-            border:none;
             border-radius:6px;
-            margin-bottom:12px;
-        ">
+            text-decoration:none;
+           ">
             מגיעים
-        </button>
+        </a>
 
-        <br>
-
-        <button style="
+        <a href="#"
+           style="
+            display:block;
             width:220px;
+            margin:0 auto;
             padding:14px;
             font-size:16px;
             background:#f28c28;
             color:#ffffff;
-            border:none;
             border-radius:6px;
-        ">
+            text-decoration:none;
+           ">
             לא מגיעים
-        </button>
+        </a>
     </div>
 
 </div>
