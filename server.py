@@ -2,7 +2,6 @@
 from flask import Flask, request, render_template
 import requests
 import xml.etree.ElementTree as ET
-from datetime import datetime
 import re
 
 app = Flask(__name__)
@@ -17,12 +16,6 @@ ZEBRA_PASS = "1q2w3e4r"
 # ======================
 # HELPERS
 # ======================
-def parse_date_safe(date_str):
-    try:
-        return datetime.strptime(date_str.strip(), "%d/%m/%Y").date()
-    except Exception:
-        return None
-
 def extract_connections_safe(xml_text):
     connections = []
     for match in re.finditer(r"<CARD_CONNECTION_.*?>.*?</CARD_CONNECTION_.*?>", xml_text, re.DOTALL):
@@ -34,7 +27,7 @@ def extract_connections_safe(xml_text):
     return connections
 
 # ======================
-# GET EVENTS FOR FAMILY
+# GET EVENTS (PROV=1 בלבד)
 # ======================
 def get_family_events(family_id):
     xml_body = f"""
@@ -72,9 +65,6 @@ def get_family_events(family_id):
         timeout=20
     )
 
-    today = datetime.today().date()
-    events = []
-
     try:
         tree = ET.fromstring(res.text)
         connections = []
@@ -85,20 +75,17 @@ def get_family_events(family_id):
     except Exception:
         connections = extract_connections_safe(res.text)
 
+    events = []
+
     for conn in connections:
         prov = (conn.findtext(".//CON_FIELDS/PROV") or "").strip()
-        date_raw = (conn.findtext(".//FIELDS/EV_D") or "").strip()
-        date_obj = parse_date_safe(date_raw)
-
         if prov != "1":
-            continue
-        if not date_obj or date_obj < today:
             continue
 
         events.append({
             "event_id": (conn.findtext("ID") or "").strip(),
             "event_name": (conn.findtext(".//FIELDS/EV_N") or "").strip(),
-            "event_date": date_raw,
+            "event_date": (conn.findtext(".//FIELDS/EV_D") or "").strip(),
             "event_time": (conn.findtext(".//FIELDS/EVE_HOUR") or "").strip(),
             "location": (conn.findtext(".//FIELDS/EVE_LOC") or "").strip(),
         })
@@ -122,59 +109,3 @@ def confirm():
         return render_template(
             "select_event.html",
             family_id=family_id,
-            events=[],
-            message="כרגע אין אירועים מאושרים ועתידיים לאישור הגעה"
-        )
-
-    if not event_id:
-        return render_template(
-            "select_event.html",
-            family_id=family_id,
-            events=events
-        )
-
-    chosen = next((e for e in events if e["event_id"] == event_id), None)
-    if not chosen:
-        return "האירוע לא נמצא", 404
-
-    return render_template(
-        "confirm.html",
-        family_id=family_id,
-        event_id=chosen["event_id"],
-        event_name=chosen["event_name"],
-        event_date=chosen["event_date"],
-        event_time=chosen["event_time"],
-        location=chosen["location"]
-    )
-
-# ======================
-# CONFIRM SUBMIT
-# ======================
-@app.route("/confirm_submit", methods=["POST"])
-def confirm_submit():
-    family_id = request.form.get("family_id")
-    event_id = request.form.get("event_id")
-    status = request.form.get("status")
-    count = request.form.get("count", "0")
-
-    print("=== CONFIRM SUBMIT ===")
-    print("family_id:", family_id)
-    print("event_id:", event_id)
-    print("status:", status)
-    print("count:", count)
-
-    return """
-    <html lang="he" dir="rtl">
-    <body style="font-family:Arial; text-align:center; padding:40px;">
-        <h2>תודה 🙏</h2>
-        <p>האישור נקלט בהצלחה</p>
-    </body>
-    </html>
-    """
-
-@app.route("/")
-def home():
-    return "SERVER OK"
-
-if __name__ == "__main__":
-    app.run(host="0.0.0.0", port=10000)
