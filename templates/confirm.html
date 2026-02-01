@@ -16,7 +16,6 @@
 
 <div style="max-width:420px; margin:0 auto; padding:20px;">
 
-    <!-- לוגו -->
     <img
         src="https://www.or4family.org.il/wp-content/uploads/2025/11/logo-1.png"
         alt="לוגו אור למשפחות"
@@ -33,70 +32,91 @@
         margin-bottom:20px;
         text-align:right;
     ">
-        <div style="font-size:18px; font-weight:bold; margin-bottom:8px;">
+        <div style="font-size:18px; font-weight:bold;">
             {{ event_name }}
         </div>
-
-        <div style="font-size:15px; margin-bottom:4px;">
-            📅 תאריך: {{ event_date }}
-        </div>
-
-        {% if event_time %}
-        <div style="font-size:15px; margin-bottom:4px;">
-            ⏰ שעה: {{ event_time }}
-        </div>
-        {% endif %}
-
-        {% if location %}
-        <div style="font-size:15px;">
-            📍 {{ location }}
-        </div>
-        {% endif %}
+        <div>📅 {{ event_date }} | ⏰ {{ event_time }}</div>
+        <div>📍 {{ location }}</div>
     </div>
 
-    <p style="font-size:16px; line-height:1.6;">
-        אנא אשרו את הגעתכם לאירוע
-    </p>
+    <p>אנא אשרו את הגעתכם לאירוע</p>
 
-    <p style="font-size:15px; color:#555;">
-        בשלב זה – אישור בלבד  
-        (בחירת אירוח ורישום ייפתחו בהמשך)
-    </p>
+    <!-- טופס אישור -->
+    <form method="post" action="/confirm_submit">
 
-    <!-- כפתורים -->
-    <div style="margin-top:30px;">
-        <a href="#"
-           style="
-            display:block;
-            width:220px;
-            margin:0 auto 12px auto;
-            padding:14px;
-            font-size:16px;
-            background:#0b5fa5;
-            color:#ffffff;
-            border-radius:6px;
-            text-decoration:none;
-           ">
+        <input type="hidden" name="family_id" value="{{ family_id }}">
+        <input type="hidden" name="event_id" value="{{ event_id }}">
+
+        <!-- בחירת מספר משתתפים -->
+        <div id="count_box" style="display:none; margin-bottom:20px;">
+            <label>מספר משתתפים:</label><br>
+            <select name="count" style="padding:8px; font-size:16px;">
+                <option value="1">1</option>
+                <option value="2">2</option>
+                <option value="3">3</option>
+                <option value="4">4</option>
+            </select>
+        </div>
+
+        <!-- כפתורים -->
+        <button type="button"
+                onclick="showCount()"
+                style="
+                    width:220px;
+                    padding:14px;
+                    font-size:16px;
+                    background:#0b5fa5;
+                    color:#ffffff;
+                    border:none;
+                    border-radius:6px;
+                    margin-bottom:12px;
+                ">
             מגיעים
-        </a>
+        </button>
 
-        <a href="#"
-           style="
-            display:block;
-            width:220px;
-            margin:0 auto;
-            padding:14px;
-            font-size:16px;
-            background:#f28c28;
-            color:#ffffff;
-            border-radius:6px;
-            text-decoration:none;
-           ">
+        <button type="submit"
+                name="status"
+                value="no"
+                style="
+                    width:220px;
+                    padding:14px;
+                    font-size:16px;
+                    background:#f28c28;
+                    color:#ffffff;
+                    border:none;
+                    border-radius:6px;
+                ">
             לא מגיעים
-        </a>
-    </div>
+        </button>
+
+        <!-- שליחה סופית -->
+        <div id="submit_box" style="display:none; margin-top:12px;">
+            <button type="submit"
+                    name="status"
+                    value="yes"
+                    style="
+                        width:220px;
+                        padding:14px;
+                        font-size:16px;
+                        background:#2e7d32;
+                        color:#ffffff;
+                        border:none;
+                        border-radius:6px;
+                    ">
+                אישור הגעה
+            </button>
+        </div>
+
+    </form>
 
 </div>
+
+<script>
+function showCount() {
+    document.getElementById("count_box").style.display = "block";
+    document.getElementById("submit_box").style.display = "block";
+}
+</script>
 
 </body>
 </html>
