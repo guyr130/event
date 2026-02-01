@@ -3,7 +3,6 @@ from flask import Flask, request, render_template
 import requests
 import xml.etree.ElementTree as ET
 from datetime import datetime
-import re
 
 app = Flask(__name__)
 
@@ -35,7 +34,6 @@ def get_family_events(family_id):
     </PERMISSION>
 
     <CARD_TYPE>business_customer</CARD_TYPE>
-
     <ID_FILTER>{family_id}</ID_FILTER>
 
     <FIELDS>
@@ -69,7 +67,6 @@ def get_family_events(family_id):
 
     tree = ET.fromstring(res.text)
     today = datetime.today().date()
-
     events = []
 
     for container in tree.findall(".//CONNECTIONS_CARDS"):
@@ -109,10 +106,16 @@ def confirm():
 
     events = get_family_events(family_id)
 
+    # 🔴 תיקון קריטי – אין אירועים אחרי סינון
     if not events:
-        return "אין אירועים זמינים", 404
+        return render_template(
+            "select_event.html",
+            family_id=family_id,
+            events=[],
+            message="כרגע אין אירועים מאושרים ועתידיים לאישור הגעה"
+        )
 
-    # שלב 1 – תמיד הצגת רשימת אירועים
+    # תמיד הצגת רשימה
     if not event_id:
         return render_template(
             "select_event.html",
@@ -120,7 +123,6 @@ def confirm():
             events=events
         )
 
-    # שלב 2 – אישור הגעה לאירוע שנבחר
     chosen = next((e for e in events if e["event_id"] == event_id), None)
     if not chosen:
         return "האירוע לא נמצא", 404
