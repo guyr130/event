@@ -24,9 +24,6 @@ def parse_date_safe(date_str):
         return None
 
 def extract_connections_safe(xml_text):
-    """
-    חילוץ CARD_CONNECTION_* גם מ-XML שבור
-    """
     connections = []
     for match in re.finditer(r"<CARD_CONNECTION_.*?>.*?</CARD_CONNECTION_.*?>", xml_text, re.DOTALL):
         try:
@@ -37,7 +34,7 @@ def extract_connections_safe(xml_text):
     return connections
 
 # ======================
-# שליפת אירועים למשפחה (בטוח)
+# GET EVENTS FOR FAMILY
 # ======================
 def get_family_events(family_id):
     xml_body = f"""
@@ -49,10 +46,6 @@ def get_family_events(family_id):
 
     <CARD_TYPE>business_customer</CARD_TYPE>
     <ID_FILTER>{family_id}</ID_FILTER>
-
-    <FIELDS>
-        <FIELD>F_NAME</FIELD>
-    </FIELDS>
 
     <CONNECTION_CARDS>
         <CONNECTION_CARD>
@@ -82,7 +75,6 @@ def get_family_events(family_id):
     today = datetime.today().date()
     events = []
 
-    # === ניסיון parsing רגיל ===
     try:
         tree = ET.fromstring(res.text)
         connections = []
@@ -91,7 +83,6 @@ def get_family_events(family_id):
                 if child.tag.startswith("CARD_CONNECTION_"):
                     connections.append(child)
     except Exception:
-        # === fallback בטוח ===
         connections = extract_connections_safe(res.text)
 
     for conn in connections:
@@ -127,7 +118,6 @@ def confirm():
 
     events = get_family_events(family_id)
 
-    # אין אירועים אחרי סינון – בלי קריסה
     if not events:
         return render_template(
             "select_event.html",
@@ -136,7 +126,6 @@ def confirm():
             message="כרגע אין אירועים מאושרים ועתידיים לאישור הגעה"
         )
 
-    # תמיד קודם רשימת אירועים
     if not event_id:
         return render_template(
             "select_event.html",
@@ -157,6 +146,31 @@ def confirm():
         event_time=chosen["event_time"],
         location=chosen["location"]
     )
+
+# ======================
+# CONFIRM SUBMIT
+# ======================
+@app.route("/confirm_submit", methods=["POST"])
+def confirm_submit():
+    family_id = request.form.get("family_id")
+    event_id = request.form.get("event_id")
+    status = request.form.get("status")
+    count = request.form.get("count", "0")
+
+    print("=== CONFIRM SUBMIT ===")
+    print("family_id:", family_id)
+    print("event_id:", event_id)
+    print("status:", status)
+    print("count:", count)
+
+    return """
+    <html lang="he" dir="rtl">
+    <body style="font-family:Arial; text-align:center; padding:40px;">
+        <h2>תודה 🙏</h2>
+        <p>האישור נקלט בהצלחה</p>
+    </body>
+    </html>
+    """
 
 @app.route("/")
 def home():
