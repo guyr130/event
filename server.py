@@ -6,15 +6,12 @@ import re
 
 app = Flask(__name__)
 
-# ======================
-# ZEBRA CONFIG
-# ======================
 ZEBRA_GET_URL = "https://25098.zebracrm.com/ext_interface.php?b=get_multi_cards_details"
 ZEBRA_USER = "IVAPP"
 ZEBRA_PASS = "1q2w3e4r"
 
 # ======================
-# HELPERS
+# SAFE XML EXTRACT
 # ======================
 def extract_connections_safe(xml_text):
     connections = []
@@ -23,13 +20,13 @@ def extract_connections_safe(xml_text):
             block = match.group(0).replace("&", "&amp;")
             connections.append(ET.fromstring(block))
         except Exception:
-            continue
+            pass
     return connections
 
 # ======================
-# GET EVENTS (PROV=1 בלבד)
+# GET EVENTS – RAW
 # ======================
-def get_family_events(family_id):
+def get_family_events_raw(family_id):
     xml_body = f"""
 <ROOT>
     <PERMISSION>
@@ -65,73 +62,36 @@ def get_family_events(family_id):
         timeout=20
     )
 
-    try:
-        tree = ET.fromstring(res.text)
-        connections = []
-        for container in tree.findall(".//CONNECTIONS_CARDS"):
-            for child in container:
-                if child.tag.startswith("CARD_CONNECTION_"):
-                    connections.append(child)
-    except Exception:
-        connections = extract_connections_safe(res.text)
+    # 🔥 DEBUG – נראה אם בכלל יש CARD_CONNECTION
+    connections = extract_connections_safe(res.text)
 
     events = []
-
     for conn in connections:
-        prov = (conn.findtext(".//CON_FIELDS/PROV") or "").strip()
-        if prov != "1":
-            continue
-
         events.append({
-            "event_id": (conn.findtext("ID") or "").strip(),
-            "event_name": (conn.findtext(".//FIELDS/EV_N") or "").strip(),
-            "event_date": (conn.findtext(".//FIELDS/EV_D") or "").strip(),
-            "event_time": (conn.findtext(".//FIELDS/EVE_HOUR") or "").strip(),
-            "location": (conn.findtext(".//FIELDS/EVE_LOC") or "").strip(),
+            "event_id": conn.findtext("ID"),
+            "event_name": conn.findtext(".//FIELDS/EV_N"),
+            "event_date": conn.findtext(".//FIELDS/EV_D"),
+            "prov": conn.findtext(".//CON_FIELDS/PROV"),
         })
 
     return events
 
 # ======================
-# ROUTES
+# ROUTE
 # ======================
 @app.route("/confirm")
 def confirm():
     family_id = request.args.get("family_id", "").strip()
-    event_id = request.args.get("event_id", "").strip()
-
     if not family_id:
         return "Missing family_id", 400
 
-    events = get_family_events(family_id)
-
-    if not events:
-        return render_template(
-            "select_event.html",
-            family_id=family_id,
-            events=[],
-            message="אין אירועים מאושרים לאישור הגעה"
-        )
-
-    if not event_id:
-        return render_template(
-            "select_event.html",
-            family_id=family_id,
-            events=events
-        )
-
-    chosen = next((e for e in events if e["event_id"] == event_id), None)
-    if not chosen:
-        return "האירוע לא נמצא", 404
+    events = get_family_events_raw(family_id)
 
     return render_template(
-        "confirm.html",
+        "select_event.html",
         family_id=family_id,
-        event_id=chosen["event_id"],
-        event_name=chosen["event_name"],
-        event_date=chosen["event_date"],
-        event_time=chosen["event_time"],
-        location=chosen["location"]
+        events=events,
+        message=f"DEBUG: נמצאו {len(events)} אירועים"
     )
 
 @app.route("/")
