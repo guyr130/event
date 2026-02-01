@@ -3,6 +3,7 @@ from flask import Flask, request, render_template
 import requests
 import xml.etree.ElementTree as ET
 from datetime import datetime
+import re
 
 app = Flask(__name__)
 
@@ -22,8 +23,21 @@ def parse_date_safe(date_str):
     except Exception:
         return None
 
+def extract_connections_safe(xml_text):
+    """
+    חילוץ CARD_CONNECTION_* גם מ-XML שבור
+    """
+    connections = []
+    for match in re.finditer(r"<CARD_CONNECTION_.*?>.*?</CARD_CONNECTION_.*?>", xml_text, re.DOTALL):
+        try:
+            block = match.group(0).replace("&", "&amp;")
+            connections.append(ET.fromstring(block))
+        except Exception:
+            continue
+    return connections
+
 # ======================
-# שליפת אירועים למשפחה
+# שליפת אירועים למשפחה (בטוח)
 # ======================
 def get_family_events(family_id):
     xml_body = f"""
@@ -65,31 +79,38 @@ def get_family_events(family_id):
         timeout=20
     )
 
-    tree = ET.fromstring(res.text)
     today = datetime.today().date()
     events = []
 
-    for container in tree.findall(".//CONNECTIONS_CARDS"):
-        for conn in container:
-            if not conn.tag.startswith("CARD_CONNECTION_"):
-                continue
+    # === ניסיון parsing רגיל ===
+    try:
+        tree = ET.fromstring(res.text)
+        connections = []
+        for container in tree.findall(".//CONNECTIONS_CARDS"):
+            for child in container:
+                if child.tag.startswith("CARD_CONNECTION_"):
+                    connections.append(child)
+    except Exception:
+        # === fallback בטוח ===
+        connections = extract_connections_safe(res.text)
 
-            prov = (conn.findtext(".//CON_FIELDS/PROV") or "").strip()
-            date_raw = (conn.findtext(".//FIELDS/EV_D") or "").strip()
-            date_obj = parse_date_safe(date_raw)
+    for conn in connections:
+        prov = (conn.findtext(".//CON_FIELDS/PROV") or "").strip()
+        date_raw = (conn.findtext(".//FIELDS/EV_D") or "").strip()
+        date_obj = parse_date_safe(date_raw)
 
-            if prov != "1":
-                continue
-            if not date_obj or date_obj < today:
-                continue
+        if prov != "1":
+            continue
+        if not date_obj or date_obj < today:
+            continue
 
-            events.append({
-                "event_id": conn.findtext("ID"),
-                "event_name": conn.findtext(".//FIELDS/EV_N"),
-                "event_date": date_raw,
-                "event_time": conn.findtext(".//FIELDS/EVE_HOUR"),
-                "location": conn.findtext(".//FIELDS/EVE_LOC"),
-            })
+        events.append({
+            "event_id": (conn.findtext("ID") or "").strip(),
+            "event_name": (conn.findtext(".//FIELDS/EV_N") or "").strip(),
+            "event_date": date_raw,
+            "event_time": (conn.findtext(".//FIELDS/EVE_HOUR") or "").strip(),
+            "location": (conn.findtext(".//FIELDS/EVE_LOC") or "").strip(),
+        })
 
     return events
 
@@ -106,7 +127,7 @@ def confirm():
 
     events = get_family_events(family_id)
 
-    # 🔴 תיקון קריטי – אין אירועים אחרי סינון
+    # אין אירועים אחרי סינון – בלי קריסה
     if not events:
         return render_template(
             "select_event.html",
@@ -115,7 +136,7 @@ def confirm():
             message="כרגע אין אירועים מאושרים ועתידיים לאישור הגעה"
         )
 
-    # תמיד הצגת רשימה
+    # תמיד קודם רשימת אירועים
     if not event_id:
         return render_template(
             "select_event.html",
