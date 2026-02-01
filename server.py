@@ -27,7 +27,7 @@ def extract_cards_safe(xml_text):
     return cards
 
 # ======================
-# שליפת אירועים למשפחה – גרסה חסינה
+# שליפת אירועים למשפחה – גרסה חסינה + XPath מתוקן
 # ======================
 def get_family_events_for_confirm(family_id):
     xml_body = f"""
@@ -69,9 +69,15 @@ def get_family_events_for_confirm(family_id):
     except Exception:
         return []
 
+    # ======================
+    # PARSE XML – בלי wildcard (ElementTree לא תומך בזה)
+    # ======================
     try:
         tree = ET.fromstring(raw_xml)
-        connections = tree.findall(".//CARD_CONNECTION_*")
+        connections = [
+            el for el in tree.iter()
+            if el.tag.startswith("CARD_CONNECTION_")
+        ]
     except Exception:
         connections = extract_cards_safe(raw_xml)
 
@@ -116,6 +122,7 @@ def confirm():
                 location=ev["location"],
                 tickets=0
             )
+
         return render_template(
             "select_event.html",
             family_id=family_id,
