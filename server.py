@@ -2,6 +2,7 @@
 from flask import Flask, request, render_template
 import requests
 import xml.etree.ElementTree as ET
+from datetime import datetime
 import re
 
 app = Flask(__name__)
@@ -16,6 +17,12 @@ ZEBRA_PASS = "1q2w3e4r"
 # ======================
 # HELPERS
 # ======================
+def parse_date_safe(date_str):
+    try:
+        return datetime.strptime(date_str.strip(), "%d/%m/%Y").date()
+    except Exception:
+        return None
+
 def extract_cards_safe(xml_text):
     cards = []
     for match in re.finditer(r"<CARD_CONNECTION_.*?>.*?</CARD_CONNECTION_.*?>", xml_text, re.DOTALL):
@@ -27,7 +34,7 @@ def extract_cards_safe(xml_text):
     return cards
 
 # ======================
-# שליפת אירועים למשפחה – מתוקן
+# שליפת אירועים למשפחה + סינון PROV=1 ותאריך עתידי
 # ======================
 def get_family_events_for_confirm(family_id):
     xml_body = f"""
@@ -39,9 +46,12 @@ def get_family_events_for_confirm(family_id):
 
     <CARD_TYPE>business_customer</CARD_TYPE>
 
-    <ID_FILTER>
-        <ID>{family_id}</ID>
-    </ID_FILTER>
+    <ID_FILTER>{family_id}</ID_FILTER>
+
+    <!-- פוקוס חובה -->
+    <FIELDS>
+        <FIELD>F_NAME</FIELD>
+    </FIELDS>
 
     <CONNECTION_CARDS>
         <CONNECTION_CARD>
@@ -53,6 +63,9 @@ def get_family_events_for_confirm(family_id):
                 <EVE_HOUR></EVE_HOUR>
                 <EVE_LOC></EVE_LOC>
             </FIELDS>
+            <CON_FIELDS>
+                <PROV></PROV>
+            </CON_FIELDS>
         </CONNECTION_CARD>
     </CONNECTION_CARDS>
 </ROOT>
@@ -66,22 +79,38 @@ def get_family_events_for_confirm(family_id):
     )
 
     raw_xml = res.text
+    today = datetime.today().date()
 
+    # ======================
+    # PARSE XML
+    # ======================
     try:
         tree = ET.fromstring(raw_xml)
-        connections = [
-            el for el in tree.iter()
-            if el.tag.startswith("CARD_CONNECTION_")
-        ]
+        conn_containers = tree.findall(".//CONNECTIONS_CARDS")
+        connections = []
+        for container in conn_containers:
+            for child in container:
+                if child.tag.startswith("CARD_CONNECTION_"):
+                    connections.append(child)
     except Exception:
         connections = extract_cards_safe(raw_xml)
 
     events = []
     for conn in connections:
+        prov = (conn.findtext(".//CON_FIELDS/PROV") or "").strip()
+        ev_date_raw = (conn.findtext(".//FIELDS/EV_D") or "").strip()
+        ev_date = parse_date_safe(ev_date_raw)
+
+        # === סינון לפי החלטה ב׳ ===
+        if prov != "1":
+            continue
+        if not ev_date or ev_date < today:
+            continue
+
         events.append({
             "event_id": (conn.findtext("ID") or "").strip(),
             "event_name": (conn.findtext(".//FIELDS/EV_N") or "").strip(),
-            "event_date": (conn.findtext(".//FIELDS/EV_D") or "").strip(),
+            "event_date": ev_date_raw,
             "event_time": (conn.findtext(".//FIELDS/EVE_HOUR") or "").strip(),
             "location": (conn.findtext(".//FIELDS/EVE_LOC") or "").strip()
         })
@@ -102,7 +131,7 @@ def confirm():
     events = get_family_events_for_confirm(family_id)
 
     if not events:
-        return "אין אירועים זמינים לאישור הגעה", 404
+        return "אין אירועים מאושרים זמינים לאישור הגעה", 404
 
     if not event_id:
         if len(events) == 1:
