@@ -50,17 +50,10 @@
 
     <div class="upload-box">
         <h2>העלאת תמונה משפחתית</h2>
-        <p class="upload-text">
-            ניתן להעלות תמונה משפחתית לצורך איסוף ועדכון עתידי במערכת.
-        </p>
 
         {% if upload_success %}
             <div class="msg success">
-                התמונה נשמרה בהצלחה
-                {% if uploaded_file %}
-                    <br>
-                    <small>{{ uploaded_file }}</small>
-                {% endif %}
+                הקובץ נשמר בהצלחה
             </div>
         {% endif %}
 
@@ -70,6 +63,7 @@
             </div>
         {% endif %}
 
+        {% if not upload_success %}
         <form action="/upload_photo" method="post" enctype="multipart/form-data" class="upload-form">
             <input type="hidden" name="family_id" value="{{ family_id }}">
             <input type="hidden" name="event_id" value="{{ event_id }}">
@@ -78,12 +72,13 @@
                 type="file"
                 id="photo"
                 name="photo"
-                accept=".jpg,.jpeg,.png,.webp,image/jpeg,image/png,image/webp"
+                accept="image/*,.pdf,application/pdf"
                 required
             >
 
             <button type="submit" class="upload-btn">העלה תמונה</button>
         </form>
+        {% endif %}
     </div>
 
 </div>
