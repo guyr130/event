@@ -16,23 +16,31 @@
         class="logo"
     >
 
-    <h1>אישור הגעה</h1>
-
-    <p><strong>{{ event_name }}</strong></p>
-    <p>📅 {{ event_date }}</p>
-
-    {% if event_time %}
-    <p>⏰ {{ event_time }}</p>
+    {% if family_name %}
+        <h1>משפחת {{ family_name }} היקרה</h1>
+    {% else %}
+        <h1>משפחה יקרה</h1>
     {% endif %}
 
-    {% if location %}
-    <p>📍 {{ location }}</p>
-    {% endif %}
+    {% if has_events %}
+        <p><strong>{{ event_name }}</strong></p>
+        <p>📅 {{ event_date }}</p>
 
-    <div class="buttons">
-        <a class="yes" href="#">מגיעים</a>
-        <a class="no" href="#">לא מגיעים</a>
-    </div>
+        {% if event_time %}
+        <p>⏰ {{ event_time }}</p>
+        {% endif %}
+
+        {% if location %}
+        <p>📍 {{ location }}</p>
+        {% endif %}
+
+        <div class="buttons">
+            <a class="yes" href="#">מגיעים</a>
+            <a class="no" href="#">לא מגיעים</a>
+        </div>
+    {% else %}
+        <p>אין אירועים זמינים לאישור הגעה</p>
+    {% endif %}
 
 </div>
 
