@@ -26,10 +26,12 @@ def extract_cards_safe(xml_text):
             continue
     return cards
 
+
 # ======================
-# שליפת שם משפחה
+# שליפת אירוע בודד לפי event_id
+# זה מסלול שהוכח בפוסטמן שעובד
 # ======================
-def get_family_name(family_id):
+def get_event_by_id(event_id):
     xml_body = f"""<?xml version="1.0" encoding="utf-8"?>
 <ROOT>
     <PERMISSION>
@@ -37,11 +39,14 @@ def get_family_name(family_id):
         <PASSWORD>{ZEBRA_PASS}</PASSWORD>
     </PERMISSION>
 
-    <CARD_TYPE_FILTER>business_customer</CARD_TYPE_FILTER>
-    <ID_FILTER>{family_id}</ID_FILTER>
+    <CARD_TYPE_FILTER>EVEFAM</CARD_TYPE_FILTER>
+    <ID_FILTER>{event_id}</ID_FILTER>
 
     <FIELDS>
-        <ORGNAME></ORGNAME>
+        <EV_N></EV_N>
+        <EV_D></EV_D>
+        <EVE_HOUR></EVE_HOUR>
+        <EVE_LOC></EVE_LOC>
     </FIELDS>
 
     <ID></ID>
@@ -58,23 +63,34 @@ def get_family_name(family_id):
         )
         raw_xml = res.text
     except Exception as e:
-        print("ZEBRA FAMILY REQUEST FAILED:", e)
-        return ""
+        print("ZEBRA EVENT REQUEST FAILED:", e)
+        return None
 
-    print("==== RAW FAMILY XML ====")
+    print("==== RAW SINGLE EVENT XML ====")
     print(raw_xml)
-    print("==== END FAMILY XML ====")
+    print("==== END SINGLE EVENT XML ====")
 
     try:
         tree = ET.fromstring(raw_xml)
-        family_name = (tree.findtext(".//CARD/FIELDS/ORGNAME") or "").strip()
-        return family_name
+        card = tree.find(".//CARD")
+        if card is None:
+            return None
+
+        return {
+            "event_id": (card.findtext("ID") or "").strip(),
+            "event_name": (card.findtext(".//FIELDS/EV_N") or "").strip(),
+            "event_date": (card.findtext(".//FIELDS/EV_D") or "").strip(),
+            "event_time": (card.findtext(".//FIELDS/EVE_HOUR") or "").strip(),
+            "location": (card.findtext(".//FIELDS/EVE_LOC") or "").strip()
+        }
     except Exception as e:
-        print("FAMILY PARSE FAILED:", e)
-        return ""
+        print("SINGLE EVENT PARSE FAILED:", e)
+        return None
+
 
 # ======================
-# שליפת אירועים למשפחה
+# שליפת אירועים למשפחה – מסלול ישן דרך ASKEV
+# ייתכן שעבד אצלך בעבר
 # ======================
 def get_family_events_for_confirm(family_id):
     xml_body = f"""
@@ -112,12 +128,12 @@ def get_family_events_for_confirm(family_id):
         )
         raw_xml = res.text
     except Exception as e:
-        print("ZEBRA REQUEST FAILED:", e)
+        print("ZEBRA FAMILY EVENTS REQUEST FAILED:", e)
         return []
 
-    print("==== RAW ZEBRA XML ====")
+    print("==== RAW FAMILY EVENTS XML ====")
     print(raw_xml)
-    print("==== END XML ====")
+    print("==== END FAMILY EVENTS XML ====")
 
     try:
         tree = ET.fromstring(raw_xml)
@@ -135,7 +151,10 @@ def get_family_events_for_confirm(family_id):
             "location": (conn.findtext(".//FIELDS/EVE_LOC") or "").strip()
         })
 
+    # סינון תוצאות ריקות
+    events = [e for e in events if e["event_id"] or e["event_name"]]
     return events
+
 
 # ======================
 # HOME
@@ -143,6 +162,7 @@ def get_family_events_for_confirm(family_id):
 @app.route("/")
 def home():
     return "HOME OK"
+
 
 # ======================
 # CONFIRM
@@ -155,14 +175,40 @@ def confirm():
     if not family_id:
         return "Missing family_id", 400
 
-    family_name = get_family_name(family_id)
+    # מסלול עדיף: אם יש event_id בלינק – שולפים ישירות אירוע בודד
+    if event_id:
+        ev = get_event_by_id(event_id)
+
+        if not ev:
+            return render_template(
+                "confirm.html",
+                family_id=family_id,
+                event_id="",
+                event_name="",
+                event_date="",
+                event_time="",
+                location="",
+                has_events=False
+            )
+
+        return render_template(
+            "confirm.html",
+            family_id=family_id,
+            event_id=ev["event_id"],
+            event_name=ev["event_name"],
+            event_date=ev["event_date"],
+            event_time=ev["event_time"],
+            location=ev["location"],
+            has_events=True
+        )
+
+    # מסלול ישן: מנסים להביא את כל האירועים דרך ASKEV
     events = get_family_events_for_confirm(family_id)
 
     if not events:
         return render_template(
             "confirm.html",
             family_id=family_id,
-            family_name=family_name,
             event_id="",
             event_name="",
             event_date="",
@@ -171,53 +217,26 @@ def confirm():
             has_events=False
         )
 
-    if not event_id:
-        if len(events) == 1:
-            ev = events[0]
-            return render_template(
-                "confirm.html",
-                family_id=family_id,
-                family_name=family_name,
-                event_id=ev["event_id"],
-                event_name=ev["event_name"],
-                event_date=ev["event_date"],
-                event_time=ev["event_time"],
-                location=ev["location"],
-                has_events=True
-            )
-
-        return render_template(
-            "select_event.html",
-            family_id=family_id,
-            family_name=family_name,
-            events=events
-        )
-
-    chosen = next((e for e in events if e["event_id"] == event_id), None)
-    if not chosen:
+    if len(events) == 1:
+        ev = events[0]
         return render_template(
             "confirm.html",
             family_id=family_id,
-            family_name=family_name,
-            event_id="",
-            event_name="",
-            event_date="",
-            event_time="",
-            location="",
-            has_events=False
+            event_id=ev["event_id"],
+            event_name=ev["event_name"],
+            event_date=ev["event_date"],
+            event_time=ev["event_time"],
+            location=ev["location"],
+            has_events=True
         )
 
     return render_template(
-        "confirm.html",
+        "select_event.html",
         family_id=family_id,
-        family_name=family_name,
-        event_id=chosen["event_id"],
-        event_name=chosen["event_name"],
-        event_date=chosen["event_date"],
-        event_time=chosen["event_time"],
-        location=chosen["location"],
-        has_events=True
+        family_name="",
+        events=events
     )
+
 
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=10000)
