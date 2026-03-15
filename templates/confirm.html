@@ -2,7 +2,7 @@
 <html lang="he" dir="rtl">
 <head>
     <meta charset="UTF-8">
-    <title>אישור הגעה | אור למשפחות</title>
+    <title>אישור הגעה</title>
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <link rel="stylesheet" href="/static/style.css">
 </head>
@@ -16,69 +16,22 @@
         class="logo"
     >
 
-    {% if family_name %}
-        <h1>משפחת {{ family_name }} היקרה</h1>
-    {% else %}
-        <h1>משפחה יקרה</h1>
+    <h1>אישור הגעה</h1>
+
+    <p><strong>{{ event_name }}</strong></p>
+    <p>📅 {{ event_date }}</p>
+
+    {% if event_time %}
+    <p>⏰ {{ event_time }}</p>
     {% endif %}
 
-    {% if has_events %}
-        <div class="event-box">
-            <h2>אישור הגעה לאירוע</h2>
-            <p><strong>שם האירוע:</strong> {{ event_name }}</p>
-            <p><strong>תאריך:</strong> {{ event_date }}</p>
-
-            {% if event_time %}
-                <p><strong>שעה:</strong> {{ event_time }}</p>
-            {% endif %}
-
-            {% if location %}
-                <p><strong>מקום:</strong> {{ location }}</p>
-            {% endif %}
-        </div>
-
-        <div class="buttons">
-            <a class="yes" href="#">מגיעים</a>
-            <a class="no" href="#">לא מגיעים</a>
-        </div>
-    {% else %}
-        <div class="event-box">
-            <h2>כרגע אין אירועים זמינים לאישור</h2>
-            <p>נשמח לראותכם באירועים הבאים של העמותה.</p>
-        </div>
+    {% if location %}
+    <p>📍 {{ location }}</p>
     {% endif %}
 
-    <div class="upload-box">
-        <h2>העלאת תמונה משפחתית</h2>
-
-        {% if upload_success %}
-            <div class="msg success">
-                הקובץ נשמר בהצלחה
-            </div>
-        {% endif %}
-
-        {% if upload_error %}
-            <div class="msg error">
-                {{ upload_error }}
-            </div>
-        {% endif %}
-
-        {% if not upload_success %}
-        <form action="/upload_photo" method="post" enctype="multipart/form-data" class="upload-form">
-            <input type="hidden" name="family_id" value="{{ family_id }}">
-            <input type="hidden" name="event_id" value="{{ event_id }}">
-
-            <input
-                type="file"
-                id="photo"
-                name="photo"
-                accept="image/*,.pdf,application/pdf"
-                required
-            >
-
-            <button type="submit" class="upload-btn">העלה תמונה</button>
-        </form>
-        {% endif %}
+    <div class="buttons">
+        <a class="yes" href="#">מגיעים</a>
+        <a class="no" href="#">לא מגיעים</a>
     </div>
 
 </div>
