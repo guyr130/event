@@ -1,8 +1,8 @@
 body {
     margin: 0;
     padding: 0;
-    font-family: Arial, Helvetica, sans-serif;
-    background: #ffffff;
+    font-family: "Heebo", Arial, Helvetica, sans-serif;
+    background: #f5f7fa;
     direction: rtl;
     text-align: center;
 }
@@ -13,7 +13,6 @@ body {
     padding: 20px;
 }
 
-/* לוגו */
 .logo {
     display: block;
     width: 100%;
@@ -22,10 +21,16 @@ body {
     margin: 0 auto 24px auto;
 }
 
-/* טקסט */
 h1 {
     color: #0b5fa5;
+    margin-bottom: 16px;
+    font-size: 28px;
+}
+
+h2 {
+    color: #0b5fa5;
     margin-bottom: 12px;
+    font-size: 22px;
 }
 
 p {
@@ -34,29 +39,24 @@ p {
     margin: 8px 0;
 }
 
-/* בחירת כמות */
-select {
-    width: 100%;
-    max-width: 260px;
-    padding: 12px;
-    font-size: 16px;
-    border-radius: 12px;
-    border: 1px solid #ccc;
-    margin: 12px auto 24px auto;
-    display: block;
+.event-box,
+.upload-box {
+    background: #ffffff;
+    border-radius: 16px;
+    padding: 18px;
+    margin-bottom: 20px;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
 }
 
-/* ===== כפתורים ===== */
 .buttons {
     width: 100%;
-    max-width: 260px;      /* אותו רוחב כמו הלוגו */
-    margin: 0 auto;
+    max-width: 260px;
+    margin: 0 auto 20px auto;
     display: flex;
     flex-direction: column;
     gap: 12px;
 }
 
-/* כפתור */
 .buttons a {
     display: block;
     width: 100%;
@@ -69,26 +69,68 @@ select {
     box-sizing: border-box;
 }
 
-/* מגיעים */
 .buttons a.yes {
     background-color: #0b5fa5;
 }
 
-/* לא מגיעים */
 .buttons a.no {
     background-color: #ff9800;
 }
-body {
-    font-family: "Heebo", Arial, sans-serif;
-    background: #f5f7fa;
-    margin: 0;
-    padding: 0;
+
+.upload-text {
+    margin-bottom: 14px;
 }
 
-.container {
-    max-width: 900px;
-    margin: 0 auto;
-    padding: 20px;
+.upload-form {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    align-items: center;
+}
+
+input[type="file"] {
+    width: 100%;
+    max-width: 280px;
+    background: #fff;
+    border: 1px solid #d9d9d9;
+    border-radius: 12px;
+    padding: 10px;
+    box-sizing: border-box;
+}
+
+.upload-btn {
+    width: 100%;
+    max-width: 280px;
+    border: none;
+    background: #0b5fa5;
+    color: #ffffff;
+    padding: 14px;
+    font-size: 17px;
+    font-weight: bold;
+    border-radius: 14px;
+    cursor: pointer;
+}
+
+.upload-btn:hover {
+    opacity: 0.95;
+}
+
+.msg {
+    margin: 12px 0;
+    padding: 12px;
+    border-radius: 12px;
+    font-size: 15px;
+    line-height: 1.5;
+}
+
+.msg.success {
+    background: #e8f7eb;
+    color: #1f7a35;
+}
+
+.msg.error {
+    background: #fdeaea;
+    color: #b3261e;
 }
 
 .page-title {
@@ -98,9 +140,9 @@ body {
 }
 
 .cards {
-    display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
-    gap: 20px;
+    display: flex !important;
+    flex-direction: column !important;
+    gap: 24px;
 }
 
 .event-card {
@@ -125,10 +167,4 @@ body {
     margin: 8px 0;
     color: #555;
     font-size: 0.95em;
-}
-/* ===== דריסה סופית – אירועים אחד מתחת לשני ===== */
-.cards {
-    display: flex !important;
-    flex-direction: column !important;
-    gap: 24px;
 }
