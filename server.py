@@ -9,7 +9,6 @@ app = Flask(__name__)
 # ======================
 # ZEBRA CONFIG
 # ======================
-
 ZEBRA_GET_URL = "https://25098.zebracrm.com/ext_interface.php?b=get_multi_cards_details"
 ZEBRA_USER = "IVAPP"
 ZEBRA_PASS = "1q2w3e4r"
@@ -17,7 +16,6 @@ ZEBRA_PASS = "1q2w3e4r"
 # ======================
 # HELPERS
 # ======================
-
 def extract_cards_safe(xml_text):
     cards = []
     for match in re.finditer(r"<CARD_CONNECTION_.*?>.*?</CARD_CONNECTION_.*?>", xml_text, re.DOTALL):
@@ -28,13 +26,10 @@ def extract_cards_safe(xml_text):
             continue
     return cards
 
-
 # ======================
 # שליפת אירועים למשפחה
 # ======================
-
 def get_family_events_for_confirm(family_id):
-
     xml_body = f"""
 <ROOT>
     <PERMISSION>
@@ -50,7 +45,6 @@ def get_family_events_for_confirm(family_id):
 
     <CONNECTION_CARD_DETAILS>
         <CONNECTION_KEY>ASKEV</CONNECTION_KEY>
-
         <FIELDS>
             <ID></ID>
             <EV_N></EV_N>
@@ -58,89 +52,70 @@ def get_family_events_for_confirm(family_id):
             <EVE_HOUR></EVE_HOUR>
             <EVE_LOC></EVE_LOC>
         </FIELDS>
-
     </CONNECTION_CARD_DETAILS>
-
 </ROOT>
 """.strip()
 
     try:
-
         res = requests.post(
             ZEBRA_GET_URL,
             data=xml_body.encode("utf-8"),
             headers={"Content-Type": "application/xml"},
             timeout=20
         )
-
         raw_xml = res.text
-
     except Exception as e:
-
         print("ZEBRA REQUEST FAILED:", e)
         return []
-
 
     print("==== RAW ZEBRA XML ====")
     print(raw_xml)
     print("==== END XML ====")
 
-
     try:
-
         tree = ET.fromstring(raw_xml)
         connections = [el for el in tree.iter() if el.tag.startswith("CARD_CONNECTION_")]
-
     except Exception:
-
         connections = extract_cards_safe(raw_xml)
 
-
     events = []
-
     for conn in connections:
-
         events.append({
-
             "event_id": (conn.findtext("ID") or "").strip(),
             "event_name": (conn.findtext(".//FIELDS/EV_N") or "").strip(),
             "event_date": (conn.findtext(".//FIELDS/EV_D") or "").strip(),
             "event_time": (conn.findtext(".//FIELDS/EVE_HOUR") or "").strip(),
             "location": (conn.findtext(".//FIELDS/EVE_LOC") or "").strip()
-
         })
-
 
     return events
 
+# ======================
+# HOME
+# ======================
+@app.route("/")
+def home():
+    return "HOME OK"
 
 # ======================
-# CONFIRM PAGE
+# CONFIRM
 # ======================
-
 @app.route("/confirm")
 def confirm():
-
     family_id = request.args.get("family_id", "").strip()
     event_id = request.args.get("event_id", "").strip()
 
     if not family_id:
         return "Missing family_id", 400
 
-
     events = get_family_events_for_confirm(family_id)
-
 
     if not events:
         return "אין אירועים זמינים לאישור הגעה", 404
 
-
     if not event_id:
-
         if len(events) == 1:
-
             ev = events[0]
-
             return render_template(
                 "confirm.html",
                 family_id=family_id,
@@ -159,12 +134,9 @@ def confirm():
             events=events
         )
 
-
     chosen = next((e for e in events if e["event_id"] == event_id), None)
-
     if not chosen:
         return "האירוע לא נמצא או לא זמין", 404
-
 
     return render_template(
         "confirm.html",
@@ -176,12 +148,6 @@ def confirm():
         location=chosen["location"],
         tickets=0
     )
-
-
-@app.route("/")
-def home():
-    return "HOME OK"
-
 
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=10000)
