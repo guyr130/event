@@ -14,12 +14,18 @@ app = Flask(__name__)
 # ======================
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 UPLOAD_FOLDER = os.path.join(BASE_DIR, "uploads")
-ALLOWED_EXTENSIONS = {"png", "jpg", "jpeg", "webp"}
+ALLOWED_EXTENSIONS = {
+    "png", "jpg", "jpeg", "webp", "gif", "bmp", "tiff", "pdf"
+}
+ALLOWED_MIME_PREFIXES = ("image/",)
+ALLOWED_MIME_EXACT = {
+    "application/pdf"
+}
 
 os.makedirs(UPLOAD_FOLDER, exist_ok=True)
 
 app.config["UPLOAD_FOLDER"] = UPLOAD_FOLDER
-app.config["MAX_CONTENT_LENGTH"] = 10 * 1024 * 1024  # 10MB
+app.config["MAX_CONTENT_LENGTH"] = 15 * 1024 * 1024  # 15MB
 
 # ======================
 # ZEBRA CONFIG
@@ -41,15 +47,40 @@ def extract_cards_safe(xml_text):
             continue
     return cards
 
-def allowed_file(filename):
-    return "." in filename and filename.rsplit(".", 1)[1].lower() in ALLOWED_EXTENSIONS
+def allowed_file(file_storage):
+    filename = (file_storage.filename or "").strip()
+    if not filename or "." not in filename:
+        return False
+
+    ext = filename.rsplit(".", 1)[1].lower()
+    mimetype = (file_storage.mimetype or "").lower()
+
+    if ext in ALLOWED_EXTENSIONS:
+        return True
+
+    if mimetype in ALLOWED_MIME_EXACT:
+        return True
+
+    if any(mimetype.startswith(prefix) for prefix in ALLOWED_MIME_PREFIXES):
+        return True
+
+    return False
 
 def build_photo_filename(family_id, event_id, original_filename):
-    ext = original_filename.rsplit(".", 1)[1].lower()
+    ext = original_filename.rsplit(".", 1)[1].lower() if "." in original_filename else "bin"
     ts = datetime.now().strftime("%Y%m%d_%H%M%S")
     safe_family = re.sub(r"[^0-9A-Za-z_-]", "", family_id)
     safe_event = re.sub(r"[^0-9A-Za-z_-]", "", event_id) if event_id else "noevent"
     return f"{safe_family}_{safe_event}_{ts}.{ext}"
+
+def extract_first_nonempty_text(root, candidate_tags):
+    for elem in root.iter():
+        tag_name = elem.tag.split("}")[-1].upper()
+        if tag_name in candidate_tags:
+            value = (elem.text or "").strip()
+            if value:
+                return value
+    return ""
 
 # ======================
 # שליפת פרטי משפחה
@@ -73,6 +104,8 @@ def get_family_details(family_id):
         <LAST_NAME></LAST_NAME>
         <NAME></NAME>
         <FIRST_NAME></FIRST_NAME>
+        <CUST_NAME></CUST_NAME>
+        <BUSINESS_NAME></BUSINESS_NAME>
     </FIELDS>
 </ROOT>
 """.strip()
@@ -100,13 +133,17 @@ def get_family_details(family_id):
 
     try:
         tree = ET.fromstring(raw_xml)
-
-        for tag in ["FAMILY_NAME", "LAST_NAME", "NAME", "FIRST_NAME"]:
-            value = tree.findtext(f".//{tag}")
-            if value and value.strip():
-                family_name = value.strip()
-                break
-
+        family_name = extract_first_nonempty_text(
+            tree,
+            {
+                "FAMILY_NAME",
+                "LAST_NAME",
+                "NAME",
+                "FIRST_NAME",
+                "CUST_NAME",
+                "BUSINESS_NAME"
+            }
+        )
     except Exception as e:
         print("FAMILY PARSE FAILED:", e)
 
@@ -198,7 +235,6 @@ def confirm():
 
     events = get_family_events_for_confirm(family_id)
 
-    # אין אירועים - עדיין מציגים שם משפחה + העלאת תמונה
     if not events:
         return render_template(
             "confirm.html",
@@ -209,14 +245,12 @@ def confirm():
             event_date="",
             event_time="",
             location="",
-            tickets=0,
             has_events=False,
             upload_success=upload_success,
             upload_error=upload_error,
             uploaded_file=uploaded_file
         )
 
-    # יש כמה אירועים - מסך בחירה נשאר קיים
     if not event_id:
         if len(events) == 1:
             ev = events[0]
@@ -229,7 +263,6 @@ def confirm():
                 event_date=ev["event_date"],
                 event_time=ev["event_time"],
                 location=ev["location"],
-                tickets=0,
                 has_events=True,
                 upload_success=upload_success,
                 upload_error=upload_error,
@@ -245,7 +278,6 @@ def confirm():
 
     chosen = next((e for e in events if e["event_id"] == event_id), None)
 
-    # event_id נשלח אבל לא נמצא - עדיין לא שוברים את המסך
     if not chosen:
         return render_template(
             "confirm.html",
@@ -256,7 +288,6 @@ def confirm():
             event_date="",
             event_time="",
             location="",
-            tickets=0,
             has_events=False,
             upload_success=upload_success,
             upload_error=upload_error,
@@ -272,7 +303,6 @@ def confirm():
         event_date=chosen["event_date"],
         event_time=chosen["event_time"],
         location=chosen["location"],
-        tickets=0,
         has_events=True,
         upload_success=upload_success,
         upload_error=upload_error,
@@ -300,7 +330,7 @@ def upload_photo():
 
     file = request.files["photo"]
 
-    if not file or file.filename == "":
+    if not file or not (file.filename or "").strip():
         return redirect(url_for(
             "confirm",
             family_id=family_id,
@@ -308,21 +338,27 @@ def upload_photo():
             upload_error="לא נבחר קובץ"
         ))
 
-    if not allowed_file(file.filename):
+    if not allowed_file(file):
         return redirect(url_for(
             "confirm",
             family_id=family_id,
             event_id=event_id,
-            upload_error="מותר להעלות רק JPG, JPEG, PNG או WEBP"
+            upload_error="מותר להעלות קובץ תמונה או PDF"
         ))
 
     try:
-        original_filename = secure_filename(file.filename)
+        original_filename = secure_filename(file.filename or "upload.bin")
+        if "." not in original_filename:
+            if file.mimetype == "application/pdf":
+                original_filename += ".pdf"
+            else:
+                original_filename += ".jpg"
+
         new_filename = build_photo_filename(family_id, event_id, original_filename)
         save_path = os.path.join(app.config["UPLOAD_FOLDER"], new_filename)
         file.save(save_path)
 
-        print(f"PHOTO SAVED: family_id={family_id}, event_id={event_id}, file={new_filename}")
+        print(f"PHOTO SAVED: family_id={family_id}, event_id={event_id}, file={new_filename}, mimetype={file.mimetype}")
 
         return redirect(url_for(
             "confirm",
@@ -338,7 +374,7 @@ def upload_photo():
             "confirm",
             family_id=family_id,
             event_id=event_id,
-            upload_error="אירעה שגיאה בשמירת התמונה"
+            upload_error="אירעה שגיאה בשמירת הקובץ"
         ))
 
 @app.route("/")
