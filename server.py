@@ -27,6 +27,53 @@ def extract_cards_safe(xml_text):
     return cards
 
 # ======================
+# שליפת שם משפחה
+# ======================
+def get_family_name(family_id):
+    xml_body = f"""<?xml version="1.0" encoding="utf-8"?>
+<ROOT>
+    <PERMISSION>
+        <USERNAME>{ZEBRA_USER}</USERNAME>
+        <PASSWORD>{ZEBRA_PASS}</PASSWORD>
+    </PERMISSION>
+
+    <CARD_TYPE_FILTER>business_customer</CARD_TYPE_FILTER>
+    <ID_FILTER>{family_id}</ID_FILTER>
+
+    <FIELDS>
+        <ORGNAME></ORGNAME>
+    </FIELDS>
+
+    <ID></ID>
+    <CARD_TYPE></CARD_TYPE>
+</ROOT>
+""".strip()
+
+    try:
+        res = requests.post(
+            ZEBRA_GET_URL,
+            data=xml_body.encode("utf-8"),
+            headers={"Content-Type": "application/xml"},
+            timeout=20
+        )
+        raw_xml = res.text
+    except Exception as e:
+        print("ZEBRA FAMILY REQUEST FAILED:", e)
+        return ""
+
+    print("==== RAW FAMILY XML ====")
+    print(raw_xml)
+    print("==== END FAMILY XML ====")
+
+    try:
+        tree = ET.fromstring(raw_xml)
+        family_name = (tree.findtext(".//CARD/FIELDS/ORGNAME") or "").strip()
+        return family_name
+    except Exception as e:
+        print("FAMILY PARSE FAILED:", e)
+        return ""
+
+# ======================
 # שליפת אירועים למשפחה
 # ======================
 def get_family_events_for_confirm(family_id):
@@ -108,10 +155,21 @@ def confirm():
     if not family_id:
         return "Missing family_id", 400
 
+    family_name = get_family_name(family_id)
     events = get_family_events_for_confirm(family_id)
 
     if not events:
-        return "אין אירועים זמינים לאישור הגעה", 404
+        return render_template(
+            "confirm.html",
+            family_id=family_id,
+            family_name=family_name,
+            event_id="",
+            event_name="",
+            event_date="",
+            event_time="",
+            location="",
+            has_events=False
+        )
 
     if not event_id:
         if len(events) == 1:
@@ -119,34 +177,46 @@ def confirm():
             return render_template(
                 "confirm.html",
                 family_id=family_id,
+                family_name=family_name,
                 event_id=ev["event_id"],
                 event_name=ev["event_name"],
                 event_date=ev["event_date"],
                 event_time=ev["event_time"],
                 location=ev["location"],
-                tickets=0
+                has_events=True
             )
 
         return render_template(
             "select_event.html",
             family_id=family_id,
-            family_name="",
+            family_name=family_name,
             events=events
         )
 
     chosen = next((e for e in events if e["event_id"] == event_id), None)
     if not chosen:
-        return "האירוע לא נמצא או לא זמין", 404
+        return render_template(
+            "confirm.html",
+            family_id=family_id,
+            family_name=family_name,
+            event_id="",
+            event_name="",
+            event_date="",
+            event_time="",
+            location="",
+            has_events=False
+        )
 
     return render_template(
         "confirm.html",
         family_id=family_id,
+        family_name=family_name,
         event_id=chosen["event_id"],
         event_name=chosen["event_name"],
         event_date=chosen["event_date"],
         event_time=chosen["event_time"],
         location=chosen["location"],
-        tickets=0
+        has_events=True
     )
 
 if __name__ == "__main__":
