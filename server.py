@@ -29,6 +29,7 @@ GOOGLE_SHEETS_WEBAPP_URL = "https://script.google.com/macros/s/AKfycbxYOTETwFoJX
 
 # ======================
 # GOOGLE DRIVE CONFIG
+# חשוב: התיקייה חייבת להיות ב-Shared Drive
 # ======================
 DRIVE_FOLDER_ID = "17KgugUdSJe0a89ObQI7d7vjjHpEQj0a4"
 ALLOWED_EXTENSIONS = {"jpg", "jpeg", "png", "webp", "pdf"}
@@ -107,13 +108,18 @@ def delete_existing_family_files(drive_service, family_id: str):
 
     result = drive_service.files().list(
         q=query,
-        fields="files(id,name)"
+        fields="files(id,name)",
+        supportsAllDrives=True,
+        includeItemsFromAllDrives=True
     ).execute()
 
     for item in result.get("files", []):
         name = item.get("name", "")
         if name.startswith(f"{family_id}."):
-            drive_service.files().delete(fileId=item["id"]).execute()
+            drive_service.files().delete(
+                fileId=item["id"],
+                supportsAllDrives=True
+            ).execute()
 
 
 def upload_file_to_drive(file_storage, family_id: str):
@@ -140,20 +146,14 @@ def upload_file_to_drive(file_storage, family_id: str):
     created = drive_service.files().create(
         body=metadata,
         media_body=media,
-        fields="id,name,webViewLink"
+        fields="id,name,webViewLink",
+        supportsAllDrives=True
     ).execute()
 
     return created
 
 
 def get_family_events(family_id: str):
-    """
-    מחזיר:
-    {
-      family_id, family_name,
-      events: [{event_id,event_name,event_date,event_time,location,tickets,prov}, ...]
-    }
-    """
     xml_body = f"""
 <ROOT>
     <PERMISSION>
@@ -236,11 +236,6 @@ def get_family_events(family_id: str):
 
 
 def filter_events(events):
-    """
-    שני תנאים:
-    1) מאושר (PROV == "1")
-    2) תאריך היום ובעתיד
-    """
     today = datetime.today().date()
     valid = []
 
@@ -327,55 +322,64 @@ def confirm():
 
 
 # ======================
+# UPLOAD FILE ONLY
+# ======================
+@app.route("/upload_file", methods=["POST"])
+def upload_file():
+    family_id = str(request.form.get("family_id") or "").strip()
+    uploaded_file = request.files.get("photo")
+
+    if not family_id:
+        return jsonify({"success": False, "error": "Missing family_id"}), 400
+
+    if not uploaded_file or not uploaded_file.filename:
+        return jsonify({"success": False, "error": "לא נבחר קובץ"}), 400
+
+    if not allowed_file(uploaded_file.filename):
+        return jsonify({
+            "success": False,
+            "error": "סוג קובץ לא נתמך. ניתן להעלות JPG / JPEG / PNG / WEBP / PDF בלבד."
+        }), 400
+
+    try:
+        info = upload_file_to_drive(uploaded_file, family_id)
+        return jsonify({
+            "success": True,
+            "filename": info.get("name", "")
+        })
+    except Exception as e:
+        return jsonify({
+            "success": False,
+            "error": f"שגיאה בהעלאת הקובץ ל-Google Drive: {str(e)}"
+        }), 500
+
+
+# ======================
 # SUBMIT
 # ======================
 @app.route("/submit", methods=["POST"])
 def submit():
-    event_id = str(request.form.get("event_id") or "").strip()
-    family_id = str(request.form.get("family_id") or "").strip()
-    status = str(request.form.get("status") or "").strip()  # yes/no
-    tickets_raw = str(request.form.get("tickets") or "0").strip()
+    data = request.get_json(silent=True) or {}
 
-    family_name = str(request.form.get("family_name") or "").strip()
-    event_name = str(request.form.get("event_name") or "").strip()
+    event_id = str(data.get("event_id") or "").strip()
+    family_id = str(data.get("family_id") or "").strip()
+    status = str(data.get("status") or "").strip()
+    tickets = int(data.get("tickets", 0) or 0)
 
-    try:
-        tickets = int(tickets_raw or 0)
-    except Exception:
-        tickets = 0
+    family_name = str(data.get("family_name") or "").strip()
+    event_name = str(data.get("event_name") or "").strip()
 
     if not event_id or not family_id or status not in ("yes", "no"):
         return jsonify({"success": False, "error": "Missing parameters"}), 400
 
-    if status == "yes" and tickets < 1:
-        return jsonify({"success": False, "error": "Missing tickets"}), 400
-
-    if status == "no":
-        tickets = 0
-
     if is_duplicate(event_id, family_id, status, tickets):
         return jsonify({"success": True, "duplicate": True})
 
-    uploaded_file = request.files.get("photo")
-    uploaded_drive_info = None
-
-    if uploaded_file and uploaded_file.filename:
-        if not allowed_file(uploaded_file.filename):
-            return jsonify({
-                "success": False,
-                "error": "סוג קובץ לא נתמך. ניתן להעלות JPG / JPEG / PNG / WEBP / PDF בלבד."
-            }), 400
-
-        try:
-            uploaded_drive_info = upload_file_to_drive(uploaded_file, family_id)
-        except Exception as e:
-            return jsonify({
-                "success": False,
-                "error": f"שגיאה בהעלאת הקובץ ל-Google Drive: {str(e)}"
-            }), 500
-
     timestamp = datetime.now().strftime("%d/%m/%Y %H:%M:%S")
     status_he = "אישרו" if status == "yes" else "ביטלו"
+
+    if status == "no":
+        tickets = 0
 
     payload = {
         "timestamp": timestamp,
@@ -396,8 +400,7 @@ def submit():
         return jsonify({
             "success": True,
             "google_status": r.status_code,
-            "google_body": (r.text or "")[:400],
-            "uploaded_file": uploaded_drive_info.get("name") if uploaded_drive_info else ""
+            "google_body": (r.text or "")[:400]
         })
     except Exception as e:
         return jsonify({"success": False, "error": str(e)}), 500
