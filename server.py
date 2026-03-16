@@ -144,6 +144,10 @@ def get_event_by_id(event_id):
 </ROOT>
 """.strip()
 
+    print("==== SENT SINGLE EVENT XML ====")
+    print(xml_body)
+    print("==== END SENT SINGLE EVENT XML ====")
+
     try:
         res = requests.post(
             ZEBRA_GET_URL,
@@ -156,19 +160,30 @@ def get_event_by_id(event_id):
         print("ZEBRA EVENT REQUEST FAILED:", e)
         return None
 
+    print("==== RAW SINGLE EVENT XML ====")
+    print(raw_xml)
+    print("==== END SINGLE EVENT XML ====")
+
     try:
         tree = ET.fromstring(raw_xml)
         card = tree.find(".//CARD")
         if card is None:
+            print("SINGLE EVENT PARSE: CARD NOT FOUND")
             return None
 
-        return {
+        event_data = {
             "event_id": (card.findtext("ID") or "").strip(),
             "event_name": (card.findtext(".//FIELDS/EV_N") or "").strip(),
             "event_date": (card.findtext(".//FIELDS/EV_D") or "").strip(),
             "event_time": (card.findtext(".//FIELDS/EVE_HOUR") or "").strip(),
             "location": (card.findtext(".//FIELDS/EVE_LOC") or "").strip()
         }
+
+        print("==== PARSED SINGLE EVENT ====")
+        print(event_data)
+        print("==== END PARSED SINGLE EVENT ====")
+
+        return event_data
     except Exception as e:
         print("SINGLE EVENT PARSE FAILED:", e)
         return None
@@ -204,6 +219,14 @@ def get_family_events_for_confirm(family_id):
 </ROOT>
 """.strip()
 
+    print("==== FAMILY ID ====")
+    print(family_id)
+    print("==== END FAMILY ID ====")
+
+    print("==== SENT FAMILY EVENTS XML ====")
+    print(xml_body)
+    print("==== END SENT FAMILY EVENTS XML ====")
+
     try:
         res = requests.post(
             ZEBRA_GET_URL,
@@ -216,23 +239,52 @@ def get_family_events_for_confirm(family_id):
         print("ZEBRA FAMILY EVENTS REQUEST FAILED:", e)
         return []
 
+    print("==== RAW FAMILY EVENTS XML ====")
+    print(raw_xml)
+    print("==== END FAMILY EVENTS XML ====")
+
+    connections = []
     try:
         tree = ET.fromstring(raw_xml)
         connections = [el for el in tree.iter() if el.tag.startswith("CARD_CONNECTION_")]
-    except Exception:
+        print("==== CONNECTION TAGS FOUND WITH ET ====")
+        print(len(connections))
+        for c in connections:
+            print("CONNECTION TAG:", c.tag)
+        print("==== END CONNECTION TAGS FOUND WITH ET ====")
+    except Exception as e:
+        print("ET PARSE FAILED:", e)
         connections = extract_cards_safe(raw_xml)
+        print("==== CONNECTION TAGS FOUND WITH SAFE EXTRACT ====")
+        print(len(connections))
+        for c in connections:
+            print("CONNECTION TAG:", c.tag)
+        print("==== END CONNECTION TAGS FOUND WITH SAFE EXTRACT ====")
 
     events = []
     for conn in connections:
-        events.append({
+        event_data = {
             "event_id": (conn.findtext("ID") or "").strip(),
             "event_name": (conn.findtext(".//FIELDS/EV_N") or "").strip(),
             "event_date": (conn.findtext(".//FIELDS/EV_D") or "").strip(),
             "event_time": (conn.findtext(".//FIELDS/EVE_HOUR") or "").strip(),
             "location": (conn.findtext(".//FIELDS/EVE_LOC") or "").strip()
-        })
+        }
+
+        print("==== PARSED EVENT ====")
+        print(event_data)
+        print("==== END PARSED EVENT ====")
+
+        events.append(event_data)
 
     events = [e for e in events if e["event_id"] or e["event_name"]]
+
+    print("==== FINAL EVENTS COUNT ====")
+    print(len(events))
+    print("==== FINAL EVENTS LIST ====")
+    print(events)
+    print("==== END FINAL EVENTS LIST ====")
+
     return events
 
 
@@ -259,6 +311,11 @@ def events_api():
 def confirm():
     family_id = request.args.get("family_id", "").strip()
     event_id = request.args.get("event_id", "").strip()
+
+    print("==== /confirm CALLED ====")
+    print("family_id =", family_id)
+    print("event_id  =", event_id)
+    print("==== END /confirm CALLED ====")
 
     if not family_id:
         return "Missing family_id", 400
@@ -338,6 +395,13 @@ def submit_response():
     status = request.form.get("status", "").strip()
     qty = request.form.get("qty", "1").strip()
 
+    print("==== SUBMIT RESPONSE ====")
+    print("family_id =", family_id)
+    print("event_id  =", event_id)
+    print("status    =", status)
+    print("qty       =", qty)
+    print("==== END SUBMIT RESPONSE ====")
+
     if not family_id:
         return "Missing family_id", 400
 
@@ -357,6 +421,11 @@ def submit_response():
     photo = request.files.get("photo")
 
     if photo and photo.filename:
+        print("==== UPLOAD FILE DETECTED ====")
+        print("filename =", photo.filename)
+        print("mimetype =", photo.mimetype)
+        print("==== END UPLOAD FILE DETECTED ====")
+
         if not allowed_file(photo.filename):
             ev = get_event_by_id(event_id) if event_id else None
             return render_template(
@@ -372,7 +441,10 @@ def submit_response():
             )
 
         try:
-            upload_file_to_drive(photo, family_id)
+            upload_result = upload_file_to_drive(photo, family_id)
+            print("==== UPLOAD TO DRIVE SUCCESS ====")
+            print(upload_result)
+            print("==== END UPLOAD TO DRIVE SUCCESS ====")
         except Exception as e:
             print("UPLOAD TO DRIVE FAILED:", e)
             ev = get_event_by_id(event_id) if event_id else None
