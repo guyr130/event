@@ -53,31 +53,6 @@
         {% endfor %}
     </select>
 
-    <div style="
-        max-width:320px;
-        margin:0 auto 20px auto;
-        text-align:right;
-        background:#f7f7f7;
-        border:1px solid #e3e3e3;
-        border-radius:10px;
-        padding:14px;
-    ">
-        <label for="photo" style="display:block; font-size:15px; font-weight:bold; margin-bottom:8px;">
-            אפשר לצרף תמונה או PDF (עד 5MB)
-        </label>
-
-        <input
-            type="file"
-            id="photo"
-            accept=".jpg,.jpeg,.png,.webp,.pdf"
-            style="display:block; width:100%; font-size:14px;"
-        >
-
-        <div style="margin-top:8px; font-size:13px; color:#666;">
-            שם הקובץ יישמר לפי מספר המשפחה
-        </div>
-    </div>
-
     <div id="statusMsg" style="font-size:16px; margin:10px 0; color:green;"></div>
 
     <div>
@@ -134,11 +109,11 @@ function unlockUI(message) {
 }
 
 function sendResponse(status) {
+
     if (alreadySent) return;
     alreadySent = true;
 
     const qtySelect = document.getElementById("qty");
-    const photoInput = document.getElementById("photo");
     let qty = qtySelect.value;
 
     if (status === "yes" && !qty) {
@@ -151,37 +126,23 @@ function sendResponse(status) {
         qty = 0;
     }
 
-    const file = photoInput.files[0];
-    if (file && file.size > 5 * 1024 * 1024) {
-        alert("הקובץ גדול מדי. אפשר להעלות עד 5MB בלבד.");
-        alreadySent = false;
-        return;
-    }
-
     lockUI("האישור נשלח, אנא המתינו…");
-
-    const formData = new FormData();
-    formData.append("event_id", "{{ event_id }}");
-    formData.append("family_id", "{{ family_id }}");
-    formData.append("family_name", "{{ family_name }}");
-    formData.append("event_name", "{{ event_name }}");
-    formData.append("status", status);
-    formData.append("tickets", qty);
-
-    if (file) {
-        formData.append("photo", file);
-    }
 
     fetch("/submit", {
         method: "POST",
-        body: formData
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+            event_id: "{{ event_id }}",
+            family_id: "{{ family_id }}",
+            family_name: "{{ family_name }}",
+            event_name: "{{ event_name }}",
+            status: status,
+            tickets: qty
+        })
     })
-    .then(async res => {
-        const data = await res.json().catch(() => ({}));
-        if (!res.ok || !data.success) {
-            throw new Error(data.error || "Server error");
-        }
-        return data;
+    .then(res => {
+        if (!res.ok) throw new Error("Server error");
+        return res.json();
     })
     .then(() => {
         window.location.href =
@@ -190,8 +151,8 @@ function sendResponse(status) {
           "&event_id={{ event_id }}" +
           "&family_id={{ family_id }}";
     })
-    .catch(err => {
-        unlockUI(err.message || "אירעה שגיאה בשליחה, אנא נסו שוב");
+    .catch(() => {
+        unlockUI("אירעה שגיאה בשליחה, אנא נסו שוב");
     });
 }
 </script>
