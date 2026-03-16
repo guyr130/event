@@ -274,13 +274,24 @@ def upload_file():
         "file_base64": file_base64
     }
 
+    print("UPLOAD_FILE -> sending to Apps Script")
+    print("payload keys:", list(payload.keys()))
+    print("family_id:", family_id)
+    print("filename:", uploaded_file.filename)
+    print("base64 length:", len(file_base64))
+
     try:
         r = requests.post(
             GOOGLE_SHEETS_WEBAPP_URL,
             json=payload,
             timeout=60
         )
+
+        print("UPLOAD_FILE -> Apps Script status:", r.status_code)
+        print("UPLOAD_FILE -> Apps Script body:", (r.text or "")[:1000])
+
         data = r.json()
+
         if not data.get("success"):
             return jsonify({
                 "success": False,
@@ -293,6 +304,7 @@ def upload_file():
         })
 
     except Exception as e:
+        print("UPLOAD_FILE ERROR:", str(e))
         return jsonify({
             "success": False,
             "error": f"שגיאה בהעלאה: {str(e)}"
