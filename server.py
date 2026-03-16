@@ -193,18 +193,15 @@ def get_event_by_id(event_id):
 # FAMILY EVENTS
 # ======================
 def get_family_events_for_confirm(family_id):
-    xml_body = f"""
+    xml_body = f"""<?xml version="1.0" encoding="utf-8"?>
 <ROOT>
     <PERMISSION>
         <USERNAME>{ZEBRA_USER}</USERNAME>
         <PASSWORD>{ZEBRA_PASS}</PASSWORD>
     </PERMISSION>
 
-    <CARD_TYPE>business_customer</CARD_TYPE>
-
-    <ID_FILTER>
-        <ID>{family_id}</ID>
-    </ID_FILTER>
+    <CARD_TYPE_FILTER>business_customer</CARD_TYPE_FILTER>
+    <ID_FILTER>{family_id}</ID_FILTER>
 
     <CONNECTION_CARD_DETAILS>
         <CONNECTION_KEY>ASKEV</CONNECTION_KEY>
@@ -216,6 +213,9 @@ def get_family_events_for_confirm(family_id):
             <EVE_LOC></EVE_LOC>
         </FIELDS>
     </CONNECTION_CARD_DETAILS>
+
+    <ID></ID>
+    <CARD_TYPE></CARD_TYPE>
 </ROOT>
 """.strip()
 
