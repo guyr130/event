@@ -4,13 +4,7 @@ import requests
 import xml.etree.ElementTree as ET
 from datetime import datetime
 import time
-import os
-import io
-import json
-
-from googleapiclient.discovery import build
-from googleapiclient.http import MediaIoBaseUpload
-from google.oauth2 import service_account
+import base64
 
 app = Flask(__name__)
 app.config["MAX_CONTENT_LENGTH"] = 5 * 1024 * 1024  # 5MB
@@ -23,15 +17,13 @@ ZEBRA_USER = "IVAPP"
 ZEBRA_PASS = "1q2w3e4r"
 
 # ======================
-# GOOGLE APPS SCRIPT (LOG)
+# GOOGLE APPS SCRIPT
 # ======================
 GOOGLE_SHEETS_WEBAPP_URL = "https://script.google.com/macros/s/AKfycbxYOTETwFoJXbFHxNUwh3-AbwUsdnQ680194wn8svCFHE7c9zFreRI9hQhcDrPsAqM1/exec"
 
 # ======================
-# GOOGLE DRIVE CONFIG
-# חשוב: התיקייה חייבת להיות ב-Shared Drive
+# FILE CONFIG
 # ======================
-DRIVE_FOLDER_ID = "17KgugUdSJe0a89ObQI7d7vjjHpEQj0a4"
 ALLOWED_EXTENSIONS = {"jpg", "jpeg", "png", "webp", "pdf"}
 
 # ======================
@@ -81,76 +73,6 @@ def allowed_file(filename: str) -> bool:
         return False
     ext = filename.rsplit(".", 1)[1].lower()
     return ext in ALLOWED_EXTENSIONS
-
-
-def file_ext(filename: str) -> str:
-    return filename.rsplit(".", 1)[1].lower()
-
-
-def get_drive_service():
-    raw_json = os.environ.get("GOOGLE_SERVICE_ACCOUNT_JSON", "").strip()
-    if not raw_json:
-        raise ValueError("Missing GOOGLE_SERVICE_ACCOUNT_JSON environment variable")
-
-    info = json.loads(raw_json)
-    creds = service_account.Credentials.from_service_account_info(
-        info,
-        scopes=["https://www.googleapis.com/auth/drive"]
-    )
-    return build("drive", "v3", credentials=creds)
-
-
-def delete_existing_family_files(drive_service, family_id: str):
-    query = (
-        f"'{DRIVE_FOLDER_ID}' in parents and trashed=false "
-        f"and name contains '{family_id}.'"
-    )
-
-    result = drive_service.files().list(
-        q=query,
-        fields="files(id,name)",
-        supportsAllDrives=True,
-        includeItemsFromAllDrives=True
-    ).execute()
-
-    for item in result.get("files", []):
-        name = item.get("name", "")
-        if name.startswith(f"{family_id}."):
-            drive_service.files().delete(
-                fileId=item["id"],
-                supportsAllDrives=True
-            ).execute()
-
-
-def upload_file_to_drive(file_storage, family_id: str):
-    ext = file_ext(file_storage.filename)
-    new_name = f"{family_id}.{ext}"
-
-    drive_service = get_drive_service()
-    delete_existing_family_files(drive_service, family_id)
-
-    file_bytes = file_storage.read()
-    file_stream = io.BytesIO(file_bytes)
-
-    media = MediaIoBaseUpload(
-        file_stream,
-        mimetype=file_storage.mimetype or "application/octet-stream",
-        resumable=False
-    )
-
-    metadata = {
-        "name": new_name,
-        "parents": [DRIVE_FOLDER_ID]
-    }
-
-    created = drive_service.files().create(
-        body=metadata,
-        media_body=media,
-        fields="id,name,webViewLink",
-        supportsAllDrives=True
-    ).execute()
-
-    return created
 
 
 def get_family_events(family_id: str):
@@ -341,16 +263,39 @@ def upload_file():
             "error": "סוג קובץ לא נתמך. ניתן להעלות JPG / JPEG / PNG / WEBP / PDF בלבד."
         }), 400
 
+    file_bytes = uploaded_file.read()
+    file_base64 = base64.b64encode(file_bytes).decode("utf-8")
+
+    payload = {
+        "action": "upload_file",
+        "family_id": family_id,
+        "filename": uploaded_file.filename,
+        "mime_type": uploaded_file.mimetype or "application/octet-stream",
+        "file_base64": file_base64
+    }
+
     try:
-        info = upload_file_to_drive(uploaded_file, family_id)
+        r = requests.post(
+            GOOGLE_SHEETS_WEBAPP_URL,
+            json=payload,
+            timeout=60
+        )
+        data = r.json()
+        if not data.get("success"):
+            return jsonify({
+                "success": False,
+                "error": data.get("error", "שגיאה בהעלאה")
+            }), 500
+
         return jsonify({
             "success": True,
-            "filename": info.get("name", "")
+            "filename": data.get("filename", "")
         })
+
     except Exception as e:
         return jsonify({
             "success": False,
-            "error": f"שגיאה בהעלאת הקובץ ל-Google Drive: {str(e)}"
+            "error": f"שגיאה בהעלאה: {str(e)}"
         }), 500
 
 
