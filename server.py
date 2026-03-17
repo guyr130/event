@@ -19,7 +19,7 @@ ZEBRA_PASS = "1q2w3e4r"
 # ======================
 # GOOGLE APPS SCRIPT
 # ======================
-GOOGLE_SHEETS_WEBAPP_URL = "https://script.google.com/macros/s/AKfycbzMvRuuZS1reF9Uoj1_hx1GcaMPq4Z8RmtP_PXBrvaL4K5F2zhLvsh4KKH0Sfj5tFsY/exec"
+GOOGLE_SHEETS_WEBAPP_URL = "https://script.google.com/macros/s/AKfycbzhT2ZNhbQqrjNSPYfqoxpnz35AsmTk4dU7xy-3uNc5nKN446NU9Nv_yjd4Y61GIoFq/exec"
 
 # ======================
 # FILE CONFIG
