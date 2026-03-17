@@ -4,6 +4,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width,initial-scale=1">
   <title>אישור הגעה</title>
+
   <style>
     body{
       margin:0;
@@ -12,228 +13,229 @@
       text-align:center;
       color:#123;
     }
+
     .wrap{
-      max-width:760px;
+      max-width:600px;
       margin:0 auto;
       padding:24px 16px 40px;
     }
-    .logo-wrap{
-      text-align:center;
-      margin-bottom:12px;
-    }
+
+    /* לוגו */
     .logo{
-      max-width:220px;
-      width:100%;
+      width:220px;
+      max-width:100%;
       height:auto;
-      margin:0 auto;
+      margin:0 auto 10px;
       display:block;
-      object-fit:contain;
     }
+
     h1{
       color:#005aa7;
       margin:8px 0 22px;
       font-size:24px;
     }
+
+    /* כרטיסים */
     .card{
       background:#fff;
       border-radius:18px;
       box-shadow:0 2px 10px rgba(0,0,0,.08);
       padding:24px 18px;
       margin:18px auto;
+
+      width:100%;
+      max-width:440px; /* 🔥 פי 2 מהלוגו */
     }
-    .event-box{
-      margin-bottom:24px;
-    }
+
     .event-title{
-      font-size:28px;
+      font-size:26px;
       font-weight:700;
       color:#005aa7;
       margin-bottom:10px;
     }
+
     .event-line{
-      font-size:20px;
-      margin:8px 0;
-    }
-    .upload-title{
       font-size:18px;
-      font-weight:700;
-      margin-bottom:14px;
+      margin:6px 0;
     }
-    .file-row{
-      margin:14px 0;
+
+    .actions{
+      margin-top:20px;
+      display:flex;
+      gap:10px;
+      justify-content:center;
+      flex-wrap:wrap;
     }
-    input[type="file"]{
-      font-size:18px;
-      max-width:100%;
-    }
+
     .btn{
       background:#0a67b2;
       color:#fff;
       border:none;
       border-radius:12px;
-      padding:14px 28px;
+      padding:14px 26px;
       font-size:18px;
       cursor:pointer;
-      margin-top:12px;
     }
+
     .btn:hover{
       background:#095a99;
     }
+
     .btn.secondary{
       background:#d9d9d9;
       color:#222;
     }
-    .btn.secondary:hover{
-      background:#c9c9c9;
-    }
-    .actions{
-      margin-top:20px;
-      display:flex;
-      gap:12px;
-      justify-content:center;
-      flex-wrap:wrap;
-    }
-    .msg{
-      margin-top:14px;
+
+    .upload-title{
       font-size:18px;
-      min-height:24px;
+      font-weight:700;
+      margin-bottom:12px;
     }
+
+    input[type="file"]{
+      font-size:16px;
+      margin-top:10px;
+    }
+
+    .msg{
+      margin-top:12px;
+      font-size:16px;
+    }
+
     .msg.error{
       color:#c40000;
     }
+
     .msg.ok{
       color:#138000;
     }
+
   </style>
 </head>
+
 <body>
-  <div class="wrap">
-    <div class="logo-wrap">
-      <img class="logo" src="{{ url_for('static', filename='logo.png') }}" alt="אור למשפחות">
+
+<div class="wrap">
+
+  <!-- לוגו -->
+  <img class="logo" src="{{ url_for('static', filename='logo.png') }}">
+
+  {% if has_event %}
+  <h1>אישור הגעה לאירוע</h1>
+
+  <div class="card">
+    <div class="event-title">{{ event_name }}</div>
+
+    <div class="event-line">
+      {{ event_date }} {% if event_time %}| {{ event_time }}{% endif %}
     </div>
 
-    {% if has_event %}
-      <h1>אישור הגעה לאירוע</h1>
-
-      <div class="card event-box">
-        <div class="event-title">{{ event_name }}</div>
-        <div class="event-line">{{ event_date }}{% if event_time %} | {{ event_time }}{% endif %}</div>
-        {% if location %}
-          <div class="event-line">{{ location }}</div>
-        {% endif %}
-        {% if tickets %}
-          <div class="event-line">יש לכם {{ tickets }} כרטיסים</div>
-        {% endif %}
-
-        <div class="actions">
-          <button class="btn" onclick="sendStatus('yes')">אישור הגעה</button>
-          <button class="btn secondary" onclick="sendStatus('no')">ביטול</button>
-        </div>
-
-        <div id="confirmMsg" class="msg"></div>
-      </div>
+    {% if location %}
+    <div class="event-line">{{ location }}</div>
     {% endif %}
 
-    <div class="card">
-      <div class="upload-title">אפשר לצרף תמונה או PDF (עד 5MB)</div>
+    {% if tickets %}
+    <div class="event-line">יש לכם {{ tickets }} כרטיסים</div>
+    {% endif %}
 
-      <form id="uploadForm">
-        <input type="hidden" name="family_id" value="{{ family_id }}">
-
-        <div class="file-row">
-          <input type="file" id="photo" name="photo" accept=".jpg,.jpeg,.png,.webp,.pdf">
-        </div>
-
-        <button type="submit" class="btn">העלאת תמונה / PDF</button>
-      </form>
-
-      <div id="uploadMsg" class="msg"></div>
+    <div class="actions">
+      <button class="btn" onclick="sendStatus('yes')">אישור הגעה</button>
+      <button class="btn secondary" onclick="sendStatus('no')">ביטול</button>
     </div>
+
+    <div id="confirmMsg" class="msg"></div>
+  </div>
+  {% endif %}
+
+  <!-- העלאת קובץ -->
+  <div class="card">
+
+    <div class="upload-title">
+      אפשר לצרף תמונה או PDF (עד 5MB)
+    </div>
+
+    <form id="uploadForm">
+      <input type="hidden" name="family_id" value="{{ family_id }}">
+
+      <input type="file" id="photo" name="photo">
+
+      <br><br>
+
+      <button type="submit" class="btn">
+        העלאת תמונה / PDF
+      </button>
+    </form>
+
+    <div id="uploadMsg" class="msg"></div>
+
   </div>
 
-  <script>
-    async function sendStatus(status) {
-      const msg = document.getElementById("confirmMsg");
-      msg.className = "msg";
-      msg.textContent = "שולח...";
+</div>
 
-      try {
-        const res = await fetch("/submit", {
-          method: "POST",
-          headers: {"Content-Type": "application/json"},
-          body: JSON.stringify({
-            event_id: "{{ event_id }}",
-            family_id: "{{ family_id }}",
-            family_name: "{{ family_name }}",
-            event_name: "{{ event_name }}",
-            status: status,
-            tickets: {{ tickets or 0 }}
-          })
-        });
+<script>
 
-        const data = await res.json();
+async function sendStatus(status) {
+  const msg = document.getElementById("confirmMsg");
+  msg.textContent = "שולח...";
 
-        if (!data.success) {
-          msg.className = "msg error";
-          msg.textContent = data.error || "שגיאה בשליחה";
-          return;
-        }
+  const res = await fetch("/submit", {
+    method: "POST",
+    headers: {"Content-Type": "application/json"},
+    body: JSON.stringify({
+      event_id: "{{ event_id }}",
+      family_id: "{{ family_id }}",
+      family_name: "{{ family_name }}",
+      event_name: "{{ event_name }}",
+      status: status,
+      tickets: {{ tickets or 0 }}
+    })
+  });
 
-        window.location.href = `/thanks?status=${status}&qty={{ tickets or 0 }}&event_id={{ event_id }}&family_id={{ family_id }}`;
-      } catch (e) {
-        msg.className = "msg error";
-        msg.textContent = "שגיאה בשליחה";
-      }
-    }
+  const data = await res.json();
 
-    document.getElementById("uploadForm").addEventListener("submit", async function(e) {
-      e.preventDefault();
+  if (!data.success) {
+    msg.className = "msg error";
+    msg.textContent = "שגיאה";
+    return;
+  }
 
-      const msg = document.getElementById("uploadMsg");
-      const fileInput = document.getElementById("photo");
+  window.location.href = "/thanks";
+}
 
-      msg.className = "msg";
-      msg.textContent = "";
+document.getElementById("uploadForm").addEventListener("submit", async function(e){
+  e.preventDefault();
 
-      if (!fileInput.files.length) {
-        msg.className = "msg error";
-        msg.textContent = "נא לבחור קובץ";
-        return;
-      }
+  const msg = document.getElementById("uploadMsg");
+  const file = document.getElementById("photo").files[0];
 
-      const file = fileInput.files[0];
-      if (file.size > 5 * 1024 * 1024) {
-        msg.className = "msg error";
-        msg.textContent = "הקובץ גדול מ-5MB";
-        return;
-      }
+  if (!file) {
+    msg.className = "msg error";
+    msg.textContent = "בחר קובץ";
+    return;
+  }
 
-      const formData = new FormData(this);
+  const formData = new FormData(this);
 
-      msg.textContent = "מעלה...";
+  msg.textContent = "מעלה...";
 
-      try {
-        const res = await fetch("/upload_file", {
-          method: "POST",
-          body: formData
-        });
+  const res = await fetch("/upload_file", {
+    method: "POST",
+    body: formData
+  });
 
-        const data = await res.json();
+  const data = await res.json();
 
-        if (!data.success) {
-          msg.className = "msg error";
-          msg.textContent = data.error || "שגיאה בהעלאה";
-          return;
-        }
+  if (!data.success) {
+    msg.className = "msg error";
+    msg.textContent = "שגיאה";
+    return;
+  }
 
-        msg.className = "msg ok";
-        msg.textContent = "הקובץ הועלה בהצלחה";
-        fileInput.value = "";
-      } catch (err) {
-        msg.className = "msg error";
-        msg.textContent = "שגיאה בהעלאה";
-      }
-    });
-  </script>
+  msg.className = "msg ok";
+  msg.textContent = "הועלה בהצלחה";
+});
+
+</script>
+
 </body>
 </html>
