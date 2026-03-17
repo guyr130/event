@@ -292,7 +292,10 @@ def upload_file():
 
         data = r.json()
 
-        if not data.get("success"):
+        # תומך גם בפורמט הישן וגם בחדש
+        is_ok = bool(data.get("success")) or bool(data.get("ok"))
+
+        if not is_ok:
             return jsonify({
                 "success": False,
                 "error": data.get("error", "שגיאה בהעלאה")
@@ -300,7 +303,9 @@ def upload_file():
 
         return jsonify({
             "success": True,
-            "filename": data.get("filename", "")
+            "filename": data.get("saved_as") or data.get("filename", ""),
+            "total_uploads": data.get("total_uploads", ""),
+            "folder_url": data.get("folder_url", "")
         })
 
     except Exception as e:
