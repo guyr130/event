@@ -17,12 +17,17 @@
       margin:0 auto;
       padding:24px 16px 40px;
     }
+    .logo-wrap{
+      text-align:center;
+      margin-bottom:12px;
+    }
     .logo{
-      max-width:300px;
+      max-width:220px;
       width:100%;
       height:auto;
-      margin:0 auto 16px;
+      margin:0 auto;
       display:block;
+      object-fit:contain;
     }
     h1{
       color:#005aa7;
@@ -99,16 +104,13 @@
     .msg.ok{
       color:#138000;
     }
-    .small{
-      font-size:16px;
-      color:#555;
-      margin-top:8px;
-    }
   </style>
 </head>
 <body>
   <div class="wrap">
-    <img class="logo" src="https://or4family.co.il/wp-content/uploads/2024/09/Or-logo-1.png" alt="אור למשפחות">
+    <div class="logo-wrap">
+      <img class="logo" src="{{ url_for('static', filename='logo.png') }}" alt="אור למשפחות">
+    </div>
 
     {% if has_event %}
       <h1>אישור הגעה לאירוע</h1>
