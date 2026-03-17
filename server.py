@@ -201,10 +201,24 @@ def confirm():
     family_name = fam["family_name"]
     valid_events = filter_events(fam["events"])
 
+    # אין event_id ב-URL
     if not event_id:
+        # אין אירועים זמינים -> מציגים רק העלאת תמונה
         if len(valid_events) == 0:
-            return "אין אירועים זמינים למשפחה זו", 404
+            return render_template(
+                "confirm.html",
+                family_id=family_id,
+                family_name=family_name,
+                event_id="",
+                event_name="",
+                event_date="",
+                event_time="",
+                location="",
+                tickets=0,
+                has_event=False
+            )
 
+        # אירוע אחד זמין -> מציגים אותו + העלאת תמונה
         if len(valid_events) == 1:
             ev = valid_events[0]
             return render_template(
@@ -216,9 +230,11 @@ def confirm():
                 event_date=ev["event_date"],
                 event_time=ev["event_time"],
                 location=ev["location"],
-                tickets=ev["tickets"]
+                tickets=ev["tickets"],
+                has_event=True
             )
 
+        # כמה אירועים -> בחירה + העלאת תמונה
         return render_template(
             "select_event.html",
             family_id=family_id,
@@ -226,9 +242,23 @@ def confirm():
             events=valid_events
         )
 
+    # יש event_id ב-URL -> נחפש אותו
     chosen = next((e for e in valid_events if str(e.get("event_id", "")).strip() == event_id), None)
+
+    # אם האירוע לא נמצא/לא זמין - נציג רק העלאת תמונה, בלי שגיאה
     if not chosen:
-        return "האירוע לא נמצא / לא מאושר / תאריך עבר", 404
+        return render_template(
+            "confirm.html",
+            family_id=family_id,
+            family_name=family_name,
+            event_id="",
+            event_name="",
+            event_date="",
+            event_time="",
+            location="",
+            tickets=0,
+            has_event=False
+        )
 
     return render_template(
         "confirm.html",
@@ -239,7 +269,8 @@ def confirm():
         event_date=chosen["event_date"],
         event_time=chosen["event_time"],
         location=chosen["location"],
-        tickets=chosen["tickets"]
+        tickets=chosen["tickets"],
+        has_event=True
     )
 
 
@@ -292,7 +323,6 @@ def upload_file():
 
         data = r.json()
 
-        # תומך גם בפורמט הישן וגם בחדש
         is_ok = bool(data.get("success")) or bool(data.get("ok"))
 
         if not is_ok:
