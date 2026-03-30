@@ -20,7 +20,6 @@
       padding:24px 16px 40px;
     }
 
-    /* לוגו */
     .logo{
       width:220px;
       max-width:100%;
@@ -35,16 +34,14 @@
       font-size:24px;
     }
 
-    /* כרטיסים */
     .card{
       background:#fff;
       border-radius:18px;
       box-shadow:0 2px 10px rgba(0,0,0,.08);
       padding:24px 18px;
       margin:18px auto;
-
       width:100%;
-      max-width:440px; /* 🔥 פי 2 מהלוגו */
+      max-width:440px;
     }
 
     .event-title{
@@ -57,6 +54,26 @@
     .event-line{
       font-size:18px;
       margin:6px 0;
+    }
+
+    .tickets-wrap{
+      margin-top:16px;
+    }
+
+    .tickets-label{
+      display:block;
+      font-size:17px;
+      margin-bottom:8px;
+      font-weight:700;
+    }
+
+    .tickets-select{
+      font-size:18px;
+      padding:10px 14px;
+      border-radius:10px;
+      border:1px solid #cfcfcf;
+      min-width:120px;
+      text-align:center;
     }
 
     .actions{
@@ -86,6 +103,11 @@
       color:#222;
     }
 
+    .btn:disabled{
+      opacity:.6;
+      cursor:not-allowed;
+    }
+
     .upload-title{
       font-size:18px;
       font-weight:700;
@@ -109,7 +131,6 @@
     .msg.ok{
       color:#138000;
     }
-
   </style>
 </head>
 
@@ -117,7 +138,6 @@
 
 <div class="wrap">
 
-  <!-- לוגו -->
   <img class="logo" src="{{ url_for('static', filename='logo.png') }}">
 
   {% if has_event %}
@@ -136,70 +156,101 @@
 
     {% if tickets %}
     <div class="event-line">יש לכם {{ tickets }} כרטיסים</div>
+
+    <div class="tickets-wrap">
+      <label class="tickets-label" for="tickets_select">בחרו כמות משתתפים</label>
+      <select id="tickets_select" class="tickets-select">
+        {% for i in range(1, tickets + 1) %}
+          <option value="{{ i }}">{{ i }}</option>
+        {% endfor %}
+      </select>
+    </div>
     {% endif %}
 
     <div class="actions">
-      <button class="btn" onclick="sendStatus('yes')">אישור הגעה</button>
-      <button class="btn secondary" onclick="sendStatus('no')">ביטול</button>
+      <button id="approveBtn" class="btn" onclick="sendStatus('yes')">אישור הגעה</button>
+      <button id="cancelBtn" class="btn secondary" onclick="sendStatus('no')">ביטול</button>
     </div>
 
     <div id="confirmMsg" class="msg"></div>
   </div>
   {% endif %}
 
-  <!-- העלאת קובץ -->
   <div class="card">
-
     <div class="upload-title">
       אפשר לצרף תמונה או PDF (עד 5MB)
     </div>
 
     <form id="uploadForm">
       <input type="hidden" name="family_id" value="{{ family_id }}">
-
       <input type="file" id="photo" name="photo">
-
       <br><br>
-
-      <button type="submit" class="btn">
-        העלאת תמונה / PDF
-      </button>
+      <button type="submit" class="btn">העלאת תמונה / PDF</button>
     </form>
 
     <div id="uploadMsg" class="msg"></div>
-
   </div>
 
 </div>
 
 <script>
-
 async function sendStatus(status) {
   const msg = document.getElementById("confirmMsg");
-  msg.textContent = "שולח...";
+  const approveBtn = document.getElementById("approveBtn");
+  const cancelBtn = document.getElementById("cancelBtn");
+  const ticketsSelect = document.getElementById("tickets_select");
 
-  const res = await fetch("/submit", {
-    method: "POST",
-    headers: {"Content-Type": "application/json"},
-    body: JSON.stringify({
-      event_id: "{{ event_id }}",
-      family_id: "{{ family_id }}",
-      family_name: "{{ family_name }}",
-      event_name: "{{ event_name }}",
-      status: status,
-      tickets: {{ tickets or 0 }}
-    })
-  });
+  let selectedTickets = 0;
 
-  const data = await res.json();
-
-  if (!data.success) {
-    msg.className = "msg error";
-    msg.textContent = "שגיאה";
-    return;
+  if (status === "yes") {
+    selectedTickets = ticketsSelect ? parseInt(ticketsSelect.value, 10) : {{ tickets or 0 }};
+  } else {
+    selectedTickets = 0;
   }
 
-  window.location.href = "/thanks";
+  msg.className = "msg";
+  msg.textContent = "שולח...";
+  approveBtn.disabled = true;
+  cancelBtn.disabled = true;
+
+  try {
+    const res = await fetch("/submit", {
+      method: "POST",
+      headers: {"Content-Type": "application/json"},
+      body: JSON.stringify({
+        event_id: "{{ event_id }}",
+        family_id: "{{ family_id }}",
+        family_name: "{{ family_name }}",
+        event_name: "{{ event_name }}",
+        status: status,
+        tickets: selectedTickets
+      })
+    });
+
+    const data = await res.json();
+
+    if (!data.success) {
+      msg.className = "msg error";
+      msg.textContent = data.error || "שגיאה";
+      approveBtn.disabled = false;
+      cancelBtn.disabled = false;
+      return;
+    }
+
+    const url =
+      "/thanks?status=" + encodeURIComponent(status) +
+      "&qty=" + encodeURIComponent(selectedTickets) +
+      "&event_id=" + encodeURIComponent("{{ event_id }}") +
+      "&family_id=" + encodeURIComponent("{{ family_id }}");
+
+    window.location.href = url;
+
+  } catch (err) {
+    msg.className = "msg error";
+    msg.textContent = "שגיאה בשליחה";
+    approveBtn.disabled = false;
+    cancelBtn.disabled = false;
+  }
 }
 
 document.getElementById("uploadForm").addEventListener("submit", async function(e){
@@ -216,25 +267,30 @@ document.getElementById("uploadForm").addEventListener("submit", async function(
 
   const formData = new FormData(this);
 
+  msg.className = "msg";
   msg.textContent = "מעלה...";
 
-  const res = await fetch("/upload_file", {
-    method: "POST",
-    body: formData
-  });
+  try {
+    const res = await fetch("/upload_file", {
+      method: "POST",
+      body: formData
+    });
 
-  const data = await res.json();
+    const data = await res.json();
 
-  if (!data.success) {
+    if (!data.success) {
+      msg.className = "msg error";
+      msg.textContent = data.error || "שגיאה";
+      return;
+    }
+
+    msg.className = "msg ok";
+    msg.textContent = "הועלה בהצלחה";
+  } catch (err) {
     msg.className = "msg error";
-    msg.textContent = "שגיאה";
-    return;
+    msg.textContent = "שגיאה בהעלאה";
   }
-
-  msg.className = "msg ok";
-  msg.textContent = "הועלה בהצלחה";
 });
-
 </script>
 
 </body>
