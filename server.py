@@ -75,6 +75,25 @@ def allowed_file(filename: str) -> bool:
     return ext in ALLOWED_EXTENSIONS
 
 
+def normalize_status(raw_status: str) -> str:
+    value = str(raw_status or "").strip().lower()
+
+    if value in ("yes", "approve", "approved", "1", "true"):
+        return "yes"
+
+    if value in ("no", "cancel", "cancelled", "canceled", "0", "false"):
+        return "no"
+
+    return ""
+
+
+def safe_int(value, default=0):
+    try:
+        return int(value)
+    except Exception:
+        return default
+
+
 def get_family_events(family_id: str):
     xml_body = f"""
 <ROOT>
@@ -133,10 +152,7 @@ def get_family_events(family_id: str):
             location = (el.findtext(".//FIELDS/EVE_LOC") or "").strip()
 
             tickets_raw = (el.findtext(".//CON_FIELDS/TOT_FFAM") or "0").strip()
-            try:
-                tickets = int(tickets_raw) if tickets_raw else 0
-            except Exception:
-                tickets = 0
+            tickets = safe_int(tickets_raw, 0)
 
             prov = (el.findtext(".//CON_FIELDS/PROV") or "").strip()
 
@@ -201,9 +217,7 @@ def confirm():
     family_name = fam["family_name"]
     valid_events = filter_events(fam["events"])
 
-    # אין event_id ב-URL
     if not event_id:
-        # אין אירועים זמינים -> מציגים רק העלאת תמונה
         if len(valid_events) == 0:
             return render_template(
                 "confirm.html",
@@ -218,7 +232,6 @@ def confirm():
                 has_event=False
             )
 
-        # אירוע אחד זמין -> מציגים אותו + העלאת תמונה
         if len(valid_events) == 1:
             ev = valid_events[0]
             return render_template(
@@ -234,7 +247,6 @@ def confirm():
                 has_event=True
             )
 
-        # כמה אירועים -> בחירה + העלאת תמונה
         return render_template(
             "select_event.html",
             family_id=family_id,
@@ -242,10 +254,8 @@ def confirm():
             events=valid_events
         )
 
-    # יש event_id ב-URL -> נחפש אותו
     chosen = next((e for e in valid_events if str(e.get("event_id", "")).strip() == event_id), None)
 
-    # אם האירוע לא נמצא/לא זמין - נציג רק העלאת תמונה, בלי שגיאה
     if not chosen:
         return render_template(
             "confirm.html",
@@ -355,23 +365,23 @@ def submit():
 
     event_id = str(data.get("event_id") or "").strip()
     family_id = str(data.get("family_id") or "").strip()
-    status = str(data.get("status") or "").strip()
-    tickets = int(data.get("tickets", 0) or 0)
+    status = normalize_status(data.get("status"))
+    tickets = safe_int(data.get("tickets", 0), 0)
 
     family_name = str(data.get("family_name") or "").strip()
     event_name = str(data.get("event_name") or "").strip()
 
     if not event_id or not family_id or status not in ("yes", "no"):
-        return jsonify({"success": False, "error": "Missing parameters"}), 400
+        return jsonify({"success": False, "error": "Missing or invalid parameters"}), 400
+
+    if status == "no":
+        tickets = 0
 
     if is_duplicate(event_id, family_id, status, tickets):
         return jsonify({"success": True, "duplicate": True})
 
     timestamp = datetime.now().strftime("%d/%m/%Y %H:%M:%S")
     status_he = "אישרו" if status == "yes" else "ביטלו"
-
-    if status == "no":
-        tickets = 0
 
     payload = {
         "timestamp": timestamp,
@@ -389,10 +399,13 @@ def submit():
             json=payload,
             timeout=20
         )
+
         return jsonify({
             "success": True,
             "google_status": r.status_code,
-            "google_body": (r.text or "")[:400]
+            "google_body": (r.text or "")[:400],
+            "status": status,
+            "tickets": tickets
         })
     except Exception as e:
         return jsonify({"success": False, "error": str(e)}), 500
@@ -403,11 +416,17 @@ def submit():
 # ======================
 @app.route("/thanks")
 def thanks():
-    status = request.args.get("status", "")
+    status = normalize_status(request.args.get("status", ""))
     qty = request.args.get("qty", "0")
     event_id = request.args.get("event_id", "")
     family_id = request.args.get("family_id", "")
-    return render_template("thanks.html", status=status, qty=qty, event_id=event_id, family_id=family_id)
+    return render_template(
+        "thanks.html",
+        status=status,
+        qty=qty,
+        event_id=event_id,
+        family_id=family_id
+    )
 
 
 # ======================
