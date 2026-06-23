@@ -397,6 +397,8 @@ def submit():
     }
 
     try:
+        print("TRANSPORT =", transport)
+print("PAYLOAD =", payload)
         r = requests.post(
             GOOGLE_SHEETS_WEBAPP_URL,
             json=payload,
