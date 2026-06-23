@@ -56,11 +56,13 @@
       margin:6px 0;
     }
 
-    .tickets-wrap{
+    .tickets-wrap,
+    .transport-wrap{
       margin-top:16px;
     }
 
-    .tickets-label{
+    .tickets-label,
+    .transport-title{
       display:block;
       font-size:17px;
       margin-bottom:8px;
@@ -74,6 +76,23 @@
       border:1px solid #cfcfcf;
       min-width:120px;
       text-align:center;
+    }
+
+    .transport-options{
+      display:inline-block;
+      text-align:right;
+      font-size:17px;
+      line-height:1.9;
+    }
+
+    .transport-options label{
+      cursor:pointer;
+      display:block;
+    }
+
+    .transport-options input{
+      margin-left:8px;
+      transform:scale(1.15);
     }
 
     .actions{
@@ -157,6 +176,22 @@
     {% if tickets %}
     <div class="event-line">יש לכם {{ tickets }} כרטיסים</div>
 
+    {% if event_id|string == "23491" %}
+    <div class="transport-wrap">
+      <div class="transport-title">בחרו הסעה, לא חובה</div>
+      <div class="transport-options">
+        <label>
+          <input type="radio" name="transport" value="ירושלים">
+          הסעה מירושלים
+        </label>
+        <label>
+          <input type="radio" name="transport" value="אשקלון אשדוד">
+          הסעה מאשקלון / אשדוד
+        </label>
+      </div>
+    </div>
+    {% endif %}
+
     <div class="tickets-wrap">
       <label class="tickets-label" for="tickets_select">בחרו כמות משתתפים</label>
       <select id="tickets_select" class="tickets-select">
@@ -201,11 +236,16 @@ async function sendStatus(status) {
   const ticketsSelect = document.getElementById("tickets_select");
 
   let selectedTickets = 0;
+  let selectedTransport = "";
 
   if (status === "yes") {
     selectedTickets = ticketsSelect ? parseInt(ticketsSelect.value, 10) : {{ tickets or 0 }};
+
+    const transportInput = document.querySelector('input[name="transport"]:checked');
+    selectedTransport = transportInput ? transportInput.value : "";
   } else {
     selectedTickets = 0;
+    selectedTransport = "";
   }
 
   msg.className = "msg";
@@ -223,7 +263,8 @@ async function sendStatus(status) {
         family_name: "{{ family_name }}",
         event_name: "{{ event_name }}",
         status: status,
-        tickets: selectedTickets
+        tickets: selectedTickets,
+        transport: selectedTransport
       })
     });
 
