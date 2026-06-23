@@ -282,8 +282,8 @@ async function sendStatus(status) {
       "/thanks?status=" + encodeURIComponent(status) +
       "&qty=" + encodeURIComponent(selectedTickets) +
       "&event_id=" + encodeURIComponent("{{ event_id }}") +
-      "&family_id=" + encodeURIComponent("{{ family_id }}");
-
+      "&family_id=" + encodeURIComponent("{{ family_id }}") +
+"&transport=" + encodeURIComponent(selectedTransport);
     window.location.href = url;
 
   } catch (err) {
