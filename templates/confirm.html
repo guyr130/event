@@ -241,7 +241,7 @@ async function sendStatus(status) {
   if (status === "yes") {
     selectedTickets = ticketsSelect ? parseInt(ticketsSelect.value, 10) : {{ tickets or 0 }};
 
-    const transportInput = document.querySelector('input[name="transport"]:checked');
+   const transportInput = document.querySelector('input[name="transport_option"]:checked');
     selectedTransport = transportInput ? transportInput.value : "";
   } else {
     selectedTickets = 0;
