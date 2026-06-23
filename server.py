@@ -398,13 +398,14 @@ def submit():
 
     try:
         print("TRANSPORT =", transport)
-print("PAYLOAD =", payload)
+        print("PAYLOAD =", payload)
+
         r = requests.post(
             GOOGLE_SHEETS_WEBAPP_URL,
             json=payload,
             timeout=20
         )
-
+        
         return jsonify({
             "success": True,
             "google_status": r.status_code,
