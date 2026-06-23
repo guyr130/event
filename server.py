@@ -371,9 +371,7 @@ def submit():
     family_name = str(data.get("family_name") or "").strip()
     event_name = str(data.get("event_name") or "").strip()
     transport = str(data.get("transport") or "").strip()
-print("========== TRANSPORT DEBUG ==========")
-print(data)
-print("TRANSPORT =", transport)
+
     if not event_id or not family_id or status not in ("yes", "no"):
         return jsonify({"success": False, "error": "Missing or invalid parameters"}), 400
 
