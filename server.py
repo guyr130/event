@@ -370,12 +370,14 @@ def submit():
 
     family_name = str(data.get("family_name") or "").strip()
     event_name = str(data.get("event_name") or "").strip()
+    transport = str(data.get("transport") or "").strip()
 
     if not event_id or not family_id or status not in ("yes", "no"):
         return jsonify({"success": False, "error": "Missing or invalid parameters"}), 400
 
     if status == "no":
         tickets = 0
+        transport = ""
 
     if is_duplicate(event_id, family_id, status, tickets):
         return jsonify({"success": True, "duplicate": True})
@@ -390,7 +392,8 @@ def submit():
         "event_id": event_id,
         "event_name": event_name,
         "status": status_he,
-        "tickets": tickets
+        "tickets": tickets,
+        "transport": transport
     }
 
     try:
@@ -405,7 +408,8 @@ def submit():
             "google_status": r.status_code,
             "google_body": (r.text or "")[:400],
             "status": status,
-            "tickets": tickets
+            "tickets": tickets,
+            "transport": transport
         })
     except Exception as e:
         return jsonify({"success": False, "error": str(e)}), 500
