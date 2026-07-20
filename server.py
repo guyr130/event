@@ -427,14 +427,16 @@ def thanks():
     qty = request.args.get("qty", "0")
     event_id = request.args.get("event_id", "")
     family_id = request.args.get("family_id", "")
+    transport = request.args.get("transport", "")
+
     return render_template(
         "thanks.html",
         status=status,
         qty=qty,
         event_id=event_id,
-        family_id=family_id
+        family_id=family_id,
+        transport=transport
     )
-
 
 # ======================
 # HEALTH
