@@ -56,6 +56,15 @@
             line-height:1.5;
         }
 
+        .transport{
+            margin:18px 0;
+            padding:12px;
+            background:#eef6fc;
+            border-radius:12px;
+            color:#0b5fa5;
+            font-size:18px;
+        }
+
         .qr-note{
             margin-top:24px;
             font-size:16px;
@@ -81,14 +90,30 @@
     >
 
     <div class="card">
+
         {% if status == "yes" %}
+
             <h2 class="ok-title">אישורכם נקלט 💙</h2>
 
-            <p>נרשמה הגעה עבור <strong>{{ qty }}</strong> משתתפים</p>
+            <p>
+                נרשמה הגעה עבור
+                <strong>{{ qty }}</strong>
+                משתתפים
+            </p>
+
+            {% if transport %}
+                <div class="transport">
+                    ההסעה שנבחרה:
+                    <strong>{{ transport }}</strong>
+                </div>
+            {% endif %}
+
             <p>נתראה באירוע</p>
 
             {% if event_id and family_id %}
-                <p class="qr-note">הציגו קוד זה בעמדת הרישום</p>
+                <p class="qr-note">
+                    הציגו קוד זה בעמדת הרישום
+                </p>
 
                 <img
                     class="qr-img"
@@ -98,14 +123,20 @@
             {% endif %}
 
         {% elif status == "no" %}
+
             <h2 class="cancel-title">העדכון נקלט</h2>
+
             <p>מצטערים שלא תגיעו</p>
             <p>נתראה באירועים אחרים</p>
 
         {% else %}
+
             <h2 class="cancel-title">העדכון נקלט</h2>
+
             <p>לא התקבל סטטוס תקין</p>
+
         {% endif %}
+
     </div>
 
 </div>
