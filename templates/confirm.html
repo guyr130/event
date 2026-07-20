@@ -176,24 +176,29 @@
     {% if tickets %}
     <div class="event-line">יש לכם {{ tickets }} כרטיסים</div>
 
-    {% if event_id|string == "23491" %}
+    {% if event_id|string == "23813" %}
     <div class="transport-wrap">
       <div class="transport-title">בחרו הסעה, לא חובה</div>
+
       <div class="transport-options">
         <label>
-          <input type="radio" name="transport" value="ירושלים">
-          הסעה מירושלים
+          <input type="radio" name="transport" value="מודיעין">
+          הסעה ממודיעין
         </label>
+
         <label>
-          <input type="radio" name="transport" value="אשקלון אשדוד">
-          הסעה מאשקלון / אשדוד
+          <input type="radio" name="transport" value="צומת גלילות">
+          הסעה מצומת גלילות
         </label>
       </div>
     </div>
     {% endif %}
 
     <div class="tickets-wrap">
-      <label class="tickets-label" for="tickets_select">בחרו כמות משתתפים</label>
+      <label class="tickets-label" for="tickets_select">
+        בחרו כמות משתתפים
+      </label>
+
       <select id="tickets_select" class="tickets-select">
         {% for i in range(1, tickets + 1) %}
           <option value="{{ i }}">{{ i }}</option>
@@ -203,8 +208,19 @@
     {% endif %}
 
     <div class="actions">
-      <button id="approveBtn" class="btn" onclick="sendStatus('yes')">אישור הגעה</button>
-      <button id="cancelBtn" class="btn secondary" onclick="sendStatus('no')">ביטול</button>
+      <button
+        id="approveBtn"
+        class="btn"
+        onclick="sendStatus('yes')">
+        אישור הגעה
+      </button>
+
+      <button
+        id="cancelBtn"
+        class="btn secondary"
+        onclick="sendStatus('no')">
+        ביטול
+      </button>
     </div>
 
     <div id="confirmMsg" class="msg"></div>
@@ -217,10 +233,21 @@
     </div>
 
     <form id="uploadForm">
-      <input type="hidden" name="family_id" value="{{ family_id }}">
-      <input type="file" id="photo" name="photo">
+      <input
+        type="hidden"
+        name="family_id"
+        value="{{ family_id }}">
+
+      <input
+        type="file"
+        id="photo"
+        name="photo">
+
       <br><br>
-      <button type="submit" class="btn">העלאת תמונה / PDF</button>
+
+      <button type="submit" class="btn">
+        העלאת תמונה / PDF
+      </button>
     </form>
 
     <div id="uploadMsg" class="msg"></div>
@@ -239,10 +266,16 @@ async function sendStatus(status) {
   let selectedTransport = "";
 
   if (status === "yes") {
-    selectedTickets = ticketsSelect ? parseInt(ticketsSelect.value, 10) : {{ tickets or 0 }};
+    selectedTickets = ticketsSelect
+      ? parseInt(ticketsSelect.value, 10)
+      : {{ tickets or 0 }};
 
-  const transportInput = document.querySelector('input[name="transport"]:checked');
-    selectedTransport = transportInput ? transportInput.value : "";
+    const transportInput =
+      document.querySelector('input[name="transport"]:checked');
+
+    selectedTransport = transportInput
+      ? transportInput.value
+      : "";
   } else {
     selectedTickets = 0;
     selectedTransport = "";
@@ -256,7 +289,9 @@ async function sendStatus(status) {
   try {
     const res = await fetch("/submit", {
       method: "POST",
-      headers: {"Content-Type": "application/json"},
+      headers: {
+        "Content-Type": "application/json"
+      },
       body: JSON.stringify({
         event_id: "{{ event_id }}",
         family_id: "{{ family_id }}",
@@ -283,7 +318,8 @@ async function sendStatus(status) {
       "&qty=" + encodeURIComponent(selectedTickets) +
       "&event_id=" + encodeURIComponent("{{ event_id }}") +
       "&family_id=" + encodeURIComponent("{{ family_id }}") +
-"&transport=" + encodeURIComponent(selectedTransport);
+      "&transport=" + encodeURIComponent(selectedTransport);
+
     window.location.href = url;
 
   } catch (err) {
@@ -294,44 +330,47 @@ async function sendStatus(status) {
   }
 }
 
-document.getElementById("uploadForm").addEventListener("submit", async function(e){
-  e.preventDefault();
+document
+  .getElementById("uploadForm")
+  .addEventListener("submit", async function(e) {
+    e.preventDefault();
 
-  const msg = document.getElementById("uploadMsg");
-  const file = document.getElementById("photo").files[0];
+    const msg = document.getElementById("uploadMsg");
+    const file = document.getElementById("photo").files[0];
 
-  if (!file) {
-    msg.className = "msg error";
-    msg.textContent = "בחר קובץ";
-    return;
-  }
-
-  const formData = new FormData(this);
-
-  msg.className = "msg";
-  msg.textContent = "מעלה...";
-
-  try {
-    const res = await fetch("/upload_file", {
-      method: "POST",
-      body: formData
-    });
-
-    const data = await res.json();
-
-    if (!data.success) {
+    if (!file) {
       msg.className = "msg error";
-      msg.textContent = data.error || "שגיאה";
+      msg.textContent = "בחר קובץ";
       return;
     }
 
-    msg.className = "msg ok";
-    msg.textContent = "הועלה בהצלחה";
-  } catch (err) {
-    msg.className = "msg error";
-    msg.textContent = "שגיאה בהעלאה";
-  }
-});
+    const formData = new FormData(this);
+
+    msg.className = "msg";
+    msg.textContent = "מעלה...";
+
+    try {
+      const res = await fetch("/upload_file", {
+        method: "POST",
+        body: formData
+      });
+
+      const data = await res.json();
+
+      if (!data.success) {
+        msg.className = "msg error";
+        msg.textContent = data.error || "שגיאה";
+        return;
+      }
+
+      msg.className = "msg ok";
+      msg.textContent = "הועלה בהצלחה";
+
+    } catch (err) {
+      msg.className = "msg error";
+      msg.textContent = "שגיאה בהעלאה";
+    }
+  });
 </script>
 
 </body>
