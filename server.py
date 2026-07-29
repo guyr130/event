@@ -371,6 +371,161 @@ def api_family_events():
         },
         "events": family_events
     })
+    # ======================
+# FAMILY MEMBERS API
+# ======================
+@app.route("/api/family-members")
+def api_family_members():
+    family_id = (
+        request.args.get("family_id") or ""
+    ).strip()
+
+    if not family_id or not family_id.isdigit():
+        return jsonify({
+            "success": False,
+            "error": "Invalid family_id"
+        }), 400
+
+    # משפחות הניסוי בלבד
+    if family_id not in {"22442", "21604"}:
+        return jsonify({
+            "success": False,
+            "error": "Family is not enabled for the pilot"
+        }), 403
+
+    xml_body = f"""
+<ROOT>
+    <PERMISSION>
+        <USERNAME>{ZEBRA_USER}</USERNAME>
+        <PASSWORD>{ZEBRA_PASS}</PASSWORD>
+    </PERMISSION>
+
+    <ID_FILTER>{family_id}</ID_FILTER>
+
+    <FIELDS>
+        <CO_NAME></CO_NAME>
+        <CP></CP>
+    </FIELDS>
+
+    <CONNECTION_CARDS>
+        <CONNECTION_CARD>
+            <CONNECTION_KEY>FAM</CONNECTION_KEY>
+
+            <FIELDS>
+                <ID></ID>
+                <P_N></P_N>
+                <F_N></F_N>
+                <CELL></CELL>
+                <TID></TID>
+            </FIELDS>
+        </CONNECTION_CARD>
+    </CONNECTION_CARDS>
+</ROOT>
+""".strip()
+
+    try:
+        response_text = zebra_post(xml_body)
+        tree = ET.fromstring(response_text)
+
+        card = tree.find(".//CARDS/CARD")
+
+        if card is None:
+            return jsonify({
+                "success": False,
+                "error": "Family not found in Zebra"
+            }), 404
+
+        family_name = (
+            card.findtext(".//FIELDS/CO_NAME") or ""
+        ).strip()
+
+        cp_value = (
+            card.findtext(".//FIELDS/CP") or ""
+        ).strip()
+
+        members = []
+
+        connections = card.find(
+            ".//CONNECTIONS_CARDS"
+        )
+
+        if connections is not None:
+            for connection in list(connections):
+                if not connection.tag.startswith(
+                    "CARD_CONNECTION_"
+                ):
+                    continue
+
+                member_id = (
+                    connection.findtext("ID") or ""
+                ).strip()
+
+                first_name = (
+                    connection.findtext(
+                        ".//FIELDS/P_N"
+                    ) or ""
+                ).strip()
+
+                last_name = (
+                    connection.findtext(
+                        ".//FIELDS/F_N"
+                    ) or ""
+                ).strip()
+
+                phone = (
+                    connection.findtext(
+                        ".//FIELDS/CELL"
+                    ) or ""
+                ).strip()
+
+                tid = (
+                    connection.findtext(
+                        ".//FIELDS/TID"
+                    ) or ""
+                ).strip()
+
+                if not member_id:
+                    continue
+
+                members.append({
+                    "member_id": member_id,
+                    "first_name": first_name,
+                    "last_name": last_name,
+
+                    # מציגים רק 4 ספרות אחרונות
+                    "phone_last4":
+                        phone[-4:]
+                        if len(phone) >= 4
+                        else phone,
+
+                    "tid_last4":
+                        tid[-4:]
+                        if len(tid) >= 4
+                        else tid
+                })
+
+        members.sort(
+            key=lambda member: (
+                member.get("first_name", ""),
+                member.get("last_name", "")
+            )
+        )
+
+        return jsonify({
+            "success": True,
+            "family": {
+                "id": family_id,
+                "name": family_name,
+                "cp": cp_value
+            },
+            "members": members
+        })
+
+    except Exception as error:
+        return jsonify({
+            "success": False,
+            "error": str(error)
+        }), 500
 @app.route("/upload_file", methods=["POST"])
 def upload_file():
     family_id = str(request.form.get("family_id") or "").strip()
