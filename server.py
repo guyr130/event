@@ -287,6 +287,90 @@ def confirm():
 # ======================
 # UPLOAD FILE ONLY
 # ======================
+# ======================
+# FAMILY EVENTS API
+# ======================
+@app.route("/api/family-events")
+def api_family_events():
+    family_id = (
+        request.args.get("family_id") or ""
+    ).strip()
+
+    if not family_id:
+        return jsonify({
+            "success": False,
+            "error": "Missing family_id"
+        }), 400
+
+    # בשלב הניסוי מאפשרים רק את משפחה 22442
+    if family_id != "22442":
+        return jsonify({
+            "success": False,
+            "error": "Family is not enabled for the pilot"
+        }), 403
+
+    family = get_family_events(family_id)
+
+    if not family:
+        return jsonify({
+            "success": False,
+            "error": "Family not found in Zebra"
+        }), 404
+
+    family_events = []
+
+    for event in family.get("events", []):
+        # רק אירועים שאליהם המשפחה רשומה
+        if str(event.get("prov", "")).strip() != "1":
+            continue
+
+        family_events.append({
+            "event_id": str(
+                event.get("event_id", "")
+            ).strip(),
+
+            "event_name": str(
+                event.get("event_name", "")
+            ).strip(),
+
+            "event_date": str(
+                event.get("event_date", "")
+            ).strip(),
+
+            "event_time": str(
+                event.get("event_time", "")
+            ).strip(),
+
+            "location": str(
+                event.get("location", "")
+            ).strip(),
+
+            "tickets": safe_int(
+                event.get("tickets", 0),
+                0
+            )
+        })
+
+    # מיון מהאירוע החדש לישן
+    family_events.sort(
+        key=lambda event:
+            parse_ddmmyyyy(
+                event.get("event_date", "")
+            ) or datetime.min.date(),
+        reverse=True
+    )
+
+    return jsonify({
+        "success": True,
+        "family": {
+            "id": family_id,
+            "name": family.get(
+                "family_name",
+                ""
+            )
+        },
+        "events": family_events
+    })
 @app.route("/upload_file", methods=["POST"])
 def upload_file():
     family_id = str(request.form.get("family_id") or "").strip()
