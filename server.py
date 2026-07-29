@@ -320,9 +320,9 @@ def api_family_events():
     family_events = []
 
     for event in family.get("events", []):
-        # רק אירועים שאליהם המשפחה רשומה
-        if str(event.get("prov", "")).strip() != "1":
-            continue
+        prov = str(
+            event.get("prov", "")
+        ).strip()
 
         family_events.append({
             "event_id": str(
@@ -348,6 +348,12 @@ def api_family_events():
             "tickets": safe_int(
                 event.get("tickets", 0),
                 0
+            ),
+
+            "prov": prov,
+
+            "approved": (
+                prov == "1"
             )
         })
 
