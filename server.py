@@ -427,7 +427,8 @@ def event_datetime_in_israel(
 
 def cancel_family_event_in_zebra(
     family_id: str,
-    event_id: str
+    event_id: str,
+    family_name: str
 ):
     xml_body = f"""
 <ROOT>
@@ -439,11 +440,11 @@ def cancel_family_event_in_zebra(
     <CARD_TYPE>business_customer</CARD_TYPE>
 
     <IDENTIFIER>
-        <KEY>ID</KEY>
-        <VALUE>{escape_xml(family_id)}</VALUE>
+        <ID>{escape_xml(family_id)}</ID>
     </IDENTIFIER>
 
     <CUST_DETAILS>
+        <CO_NAME>{escape_xml(family_name)}</CO_NAME>
     </CUST_DETAILS>
 
     <CONNECTION_CARD_DETAILS>
@@ -496,6 +497,11 @@ def cancel_family_event_in_zebra(
             or ""
         ).strip().lower()
 
+        response_identifier = (
+            tree.findtext(".//identifier")
+            or ""
+        ).strip()
+
         if not message:
             raise RuntimeError(
                 "מערכת ההזמנות לא אישרה את העדכון"
@@ -507,11 +513,17 @@ def cancel_family_event_in_zebra(
                 "error",
                 "fail",
                 "not found",
-                "failed"
+                "failed",
+                "no information"
             )
         ):
             raise RuntimeError(
                 "מערכת ההזמנות דחתה את הביטול"
+            )
+
+        if response_identifier != family_id:
+            raise RuntimeError(
+                "מערכת ההזמנות לא זיהתה את כרטיס המשפחה"
             )
 
     except ET.ParseError:
@@ -1196,7 +1208,11 @@ def api_cancel_family_event():
 
         cancel_family_event_in_zebra(
             family_id,
-            event_id
+            event_id,
+            family.get(
+                "family_name",
+                ""
+            )
         )
 
         updated_family = get_family_events(
