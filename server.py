@@ -440,7 +440,8 @@ def cancel_family_event_in_zebra(
     <CARD_TYPE>business_customer</CARD_TYPE>
 
     <IDENTIFIER>
-        <ID>{escape_xml(family_id)}</ID>
+        <KEY>USER_CARD_ID</KEY>
+        <VALUE>{escape_xml(family_id)}</VALUE>
     </IDENTIFIER>
 
     <CUST_DETAILS>
