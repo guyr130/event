@@ -453,6 +453,7 @@ def cancel_family_event_in_zebra(
             <ADDI_INV>0</ADDI_INV>
             <TOT_FFAM>0</TOT_FFAM>
             <CANCEL_AT>1</CANCEL_AT>
+            <PROV>0</PROV>
         </FIELDS>
     </CONNECTION_CARD_DETAILS>
 </ROOT>
@@ -1177,59 +1178,59 @@ def api_cancel_family_event():
             event_id
         )
 
-        cancellation_verified = False
+        time.sleep(1)
 
-        for verification_attempt in range(4):
-            if verification_attempt > 0:
-                time.sleep(1)
+        updated_family = get_family_events(
+            family_id
+        )
 
-            updated_family = get_family_events(
-                family_id
-            )
-
-            updated_event = next(
-                (
-                    event
-                    for event in (
-                        updated_family or {}
-                    ).get(
-                        "events",
-                        []
+        updated_event = next(
+            (
+                event
+                for event in (
+                    updated_family or {}
+                ).get(
+                    "events",
+                    []
+                )
+                if str(
+                    event.get(
+                        "event_id",
+                        ""
                     )
-                    if str(
-                        event.get(
-                            "event_id",
-                            ""
-                        )
-                    ).strip() == event_id
-                ),
-                None
-            )
+                ).strip() == event_id
+            ),
+            None
+        )
 
-            if (
-                updated_event and
-                bool(
-                    updated_event.get(
-                        "cancelled",
-                        False
-                    )
-                ) and
-                safe_int(
-                    updated_event.get(
-                        "tickets",
-                        0
-                    ),
+        cancellation_verified = bool(
+            updated_event and
+            bool(
+                updated_event.get(
+                    "cancelled",
+                    False
+                )
+            ) and
+            safe_int(
+                updated_event.get(
+                    "tickets",
                     0
-                ) == 0
-            ):
-                cancellation_verified = True
-                break
+                ),
+                0
+            ) == 0 and
+            str(
+                updated_event.get(
+                    "prov",
+                    ""
+                )
+            ).strip() == "0"
+        )
 
         if not cancellation_verified:
             return jsonify({
                 "success": False,
                 "error":
-                    "הביטול נשלח, אך תיבת ביטול השתתפות לא סומנה במערכת"
+                    "הביטול לא הושלם במערכת ההזמנות. לא בוצע שינוי באפליקציה."
             }), 502
 
         return jsonify({
