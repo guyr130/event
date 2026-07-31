@@ -448,9 +448,10 @@ def cancel_family_event_in_zebra(
         <VALUE>{escape_xml(event_id)}</VALUE>
 
         <FIELDS>
-            <PROV>0</PROV>
-            <TOT_FFAM>0</TOT_FFAM>
+            <TIC_A>0</TIC_A>
+            <ADDI_INV>0</ADDI_INV>
             <CANCEL_AT>1</CANCEL_AT>
+            <PROV>0</PROV>
         </FIELDS>
     </CONNECTION_CARD_DETAILS>
 </ROOT>
