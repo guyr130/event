@@ -1,9 +1,10 @@
 # -*- coding: utf-8 -*-
 from flask import Flask, request, render_template, jsonify
 import base64
-from datetime import datetime
+from datetime import datetime, timedelta
 import time
 import xml.etree.ElementTree as ET
+from zoneinfo import ZoneInfo
 
 import requests
 
@@ -255,7 +256,7 @@ def is_valid_israeli_id(
     return total % 10 == 0
 
 
-def get_family_member_ids(
+def get_family_member_records(
     family_id: str
 ):
     xml_body = f"""
@@ -277,6 +278,7 @@ def get_family_member_ids(
             <CONNECTION_KEY>FAM</CONNECTION_KEY>
             <FIELDS>
                 <ID></ID>
+                <TID></TID>
             </FIELDS>
         </CONNECTION_CARD>
     </CONNECTION_CARDS>
@@ -298,7 +300,7 @@ def get_family_member_ids(
     if card is None:
         return None
 
-    member_ids = set()
+    members = {}
     connections = card.find(
         ".//CONNECTIONS_CARDS"
     )
@@ -317,10 +319,18 @@ def get_family_member_ids(
                 or ""
             ).strip()
 
-            if member_id:
-                member_ids.add(member_id)
+            tid = (
+                connection.findtext(
+                    ".//FIELDS/TID"
+                ) or ""
+            ).strip()
 
-    return member_ids
+            if member_id:
+                members[member_id] = {
+                    "tid": tid
+                }
+
+    return members
 
 
 def update_member_tid_in_zebra(
@@ -383,6 +393,111 @@ def update_member_tid_in_zebra(
         pass
 
 
+def event_datetime_in_israel(
+    event_date: str,
+    event_time: str
+):
+    date_value = str(
+        event_date or ""
+    ).strip()
+
+    time_value = str(
+        event_time or ""
+    ).strip()[:5]
+
+    if (
+        not date_value or
+        not time_value
+    ):
+        return None
+
+    try:
+        return datetime.strptime(
+            f"{date_value} {time_value}",
+            "%d/%m/%Y %H:%M"
+        ).replace(
+            tzinfo=ZoneInfo(
+                "Asia/Jerusalem"
+            )
+        )
+
+    except ValueError:
+        return None
+
+
+def cancel_family_event_in_zebra(
+    family_id: str,
+    event_id: str
+):
+    xml_body = f"""
+<ROOT>
+    <PERMISSION>
+        <USERNAME>{escape_xml(ZEBRA_USER)}</USERNAME>
+        <PASSWORD>{escape_xml(ZEBRA_PASS)}</PASSWORD>
+    </PERMISSION>
+
+    <CARD_TYPE>business_customer</CARD_TYPE>
+
+    <IDENTIFIER>
+        <ID>{escape_xml(family_id)}</ID>
+    </IDENTIFIER>
+
+    <CONNECTION_CARD_DETAILS>
+        <UPDATE_EVEN_CONNECTED>1</UPDATE_EVEN_CONNECTED>
+        <CONNECTION_KEY>ASKEV</CONNECTION_KEY>
+        <KEY>ID</KEY>
+        <VALUE>{escape_xml(event_id)}</VALUE>
+
+        <FIELDS>
+            <TIC_A>0</TIC_A>
+            <ADDI_INV>0</ADDI_INV>
+            <TOT_FFAM>0</TOT_FFAM>
+            <CANCEL_AT>1</CANCEL_AT>
+        </FIELDS>
+    </CONNECTION_CARD_DETAILS>
+</ROOT>
+""".strip()
+
+    response = requests.post(
+        ZEBRA_UPDATE_URL,
+        data=xml_body.encode("utf-8"),
+        headers={
+            "Content-Type":
+                "application/xml"
+        },
+        timeout=15
+    )
+
+    if response.status_code != 200:
+        raise RuntimeError(
+            "Zebra cancellation failed with HTTP "
+            f"{response.status_code}"
+        )
+
+    response_text = response.text or ""
+
+    try:
+        tree = ET.fromstring(
+            response_text
+        )
+
+        message = (
+            tree.findtext(".//msg")
+            or ""
+        ).strip().lower()
+
+        if (
+            "error" in message or
+            "fail" in message
+        ):
+            raise RuntimeError(
+                "Zebra rejected the cancellation"
+            )
+
+    except ET.ParseError:
+        pass
+
+
 # ======================
 # FAMILY EVENTS FROM ZEBRA
 # ======================
@@ -419,6 +534,7 @@ def get_family_events(
                 <TOT_FFAM></TOT_FFAM>
                 <PROV></PROV>
                 <FULL_N></FULL_N>
+                <CANCEL_AT></CANCEL_AT>
             </CON_FIELDS>
         </CONNECTION_CARD>
     </CONNECTION_CARDS>
@@ -514,6 +630,12 @@ def get_family_events(
                 ) or ""
             ).strip()
 
+            cancel_at = (
+                connection.findtext(
+                    ".//CON_FIELDS/CANCEL_AT"
+                ) or ""
+            ).strip()
+
             events.append({
                 "event_id":
                     event_id,
@@ -537,7 +659,11 @@ def get_family_events(
                     prov,
 
                 "inviter_name":
-                    inviter_name
+                    inviter_name,
+
+                "cancelled": (
+                    cancel_at == "1"
+                )
             })
 
     return {
@@ -862,7 +988,14 @@ def api_family_events():
                     "inviter_name",
                     ""
                 )
-            ).strip()
+            ).strip(),
+
+            "cancelled": bool(
+                event.get(
+                    "cancelled",
+                    False
+                )
+            )
         })
 
     family_events.sort(
@@ -893,6 +1026,172 @@ def api_family_events():
         "events":
             family_events
     })
+
+
+# ======================
+# CANCEL FAMILY EVENT API
+# ======================
+@app.route(
+    "/api/cancel-family-event",
+    methods=["POST"]
+)
+def api_cancel_family_event():
+    data = (
+        request.get_json(
+            silent=True
+        ) or {}
+    )
+
+    family_id = str(
+        data.get("family_id") or ""
+    ).strip()
+
+    event_id = str(
+        data.get("event_id") or ""
+    ).strip()
+
+    if (
+        not family_id.isdigit() or
+        not event_id.isdigit()
+    ):
+        return jsonify({
+            "success": False,
+            "error":
+                "Invalid family or event"
+        }), 400
+
+    if family_id not in PILOT_FAMILY_IDS:
+        return jsonify({
+            "success": False,
+            "error":
+                "Family is not enabled for the pilot"
+        }), 403
+
+    try:
+        family = get_family_events(
+            family_id
+        )
+
+        if not family:
+            return jsonify({
+                "success": False,
+                "error":
+                    "Family not found in Zebra"
+            }), 404
+
+        family_event = next(
+            (
+                event
+                for event in family.get(
+                    "events",
+                    []
+                )
+                if str(
+                    event.get(
+                        "event_id",
+                        ""
+                    )
+                ).strip() == event_id
+            ),
+            None
+        )
+
+        if not family_event:
+            return jsonify({
+                "success": False,
+                "error":
+                    "Registration not found"
+            }), 404
+
+        if bool(
+            family_event.get(
+                "cancelled",
+                False
+            )
+        ):
+            return jsonify({
+                "success": True,
+                "already_cancelled": True
+            })
+
+        tickets = safe_int(
+            family_event.get(
+                "tickets",
+                0
+            ),
+            0
+        )
+
+        approved = str(
+            family_event.get(
+                "prov",
+                ""
+            )
+        ).strip() == "1"
+
+        if tickets <= 0 and not approved:
+            return jsonify({
+                "success": False,
+                "error":
+                    "Registration not found"
+            }), 404
+
+        event_datetime = event_datetime_in_israel(
+            family_event.get(
+                "event_date",
+                ""
+            ),
+            family_event.get(
+                "event_time",
+                ""
+            )
+        )
+
+        if event_datetime is None:
+            return jsonify({
+                "success": False,
+                "error":
+                    "לא ניתן לחשב את מועד הביטול לאירוע זה"
+            }), 409
+
+        cancellation_deadline = (
+            event_datetime -
+            timedelta(hours=24)
+        )
+
+        now = datetime.now(
+            ZoneInfo(
+                "Asia/Jerusalem"
+            )
+        )
+
+        if now >= cancellation_deadline:
+            return jsonify({
+                "success": False,
+                "error":
+                    "מועד הביטול לאירוע זה הסתיים"
+            }), 409
+
+        cancel_family_event_in_zebra(
+            family_id,
+            event_id
+        )
+
+        return jsonify({
+            "success": True,
+            "event_id": event_id,
+            "cancelled_at":
+                now.isoformat(),
+            "cancellation_deadline":
+                cancellation_deadline.isoformat()
+        })
+
+    except Exception as error:
+        return jsonify({
+            "success": False,
+            "error":
+                str(error)
+        }), 500
 
 
 # ======================
@@ -1037,6 +1336,35 @@ def api_family_members():
                 if not member_id:
                     continue
 
+                tid_digits = "".join(
+                    character
+                    for character in tid
+                    if character.isdigit()
+                )
+
+                tid_length = len(
+                    tid_digits
+                )
+
+                missing_leading_zeros = (
+                    9 - tid_length
+                    if 6 <= tid_length < 9
+                    else 0
+                )
+
+                padded_tid = (
+                    tid_digits.zfill(9)
+                    if missing_leading_zeros > 0
+                    else ""
+                )
+
+                can_complete_with_zeros = (
+                    bool(padded_tid) and
+                    is_valid_israeli_id(
+                        padded_tid
+                    )
+                )
+
                 members.append({
                     "member_id":
                         member_id,
@@ -1055,7 +1383,19 @@ def api_family_members():
                     "tid_last4":
                         tid[-4:]
                         if len(tid) >= 4
-                        else tid
+                        else tid,
+
+                    "tid_length":
+                        tid_length,
+
+                    "missing_leading_zeros": (
+                        missing_leading_zeros
+                        if can_complete_with_zeros
+                        else 0
+                    ),
+
+                    "can_complete_with_zeros":
+                        can_complete_with_zeros
                 })
 
         members.sort(
@@ -1119,9 +1459,18 @@ def api_update_family_member_id():
         data.get("member_id") or ""
     ).strip()
 
-    identity_number = normalize_israeli_id(
-        data.get("identity_number")
+    add_missing_leading_zeros = bool(
+        data.get(
+            "add_missing_leading_zeros"
+        )
     )
+
+    identity_number = ""
+
+    if not add_missing_leading_zeros:
+        identity_number = normalize_israeli_id(
+            data.get("identity_number")
+        )
 
     if (
         not family_id.isdigit() or
@@ -1140,8 +1489,11 @@ def api_update_family_member_id():
                 "Family is not enabled for the pilot"
         }), 403
 
-    if not is_valid_israeli_id(
-        identity_number
+    if (
+        not add_missing_leading_zeros and
+        not is_valid_israeli_id(
+            identity_number
+        )
     ):
         return jsonify({
             "success": False,
@@ -1150,23 +1502,55 @@ def api_update_family_member_id():
         }), 400
 
     try:
-        member_ids = get_family_member_ids(
+        member_records = get_family_member_records(
             family_id
         )
 
-        if member_ids is None:
+        if member_records is None:
             return jsonify({
                 "success": False,
                 "error":
                     "Family not found in Zebra"
             }), 404
 
-        if member_id not in member_ids:
+        if member_id not in member_records:
             return jsonify({
                 "success": False,
                 "error":
                     "האדם שנבחר אינו שייך למשפחה"
             }), 403
+
+        if add_missing_leading_zeros:
+            stored_tid = str(
+                member_records[member_id].get(
+                    "tid",
+                    ""
+                ) or ""
+            ).strip()
+
+            stored_digits = "".join(
+                character
+                for character in stored_tid
+                if character.isdigit()
+            )
+
+            if not 6 <= len(stored_digits) < 9:
+                return jsonify({
+                    "success": False,
+                    "error":
+                        "לא ניתן להשלים אפסים למספר השמור"
+                }), 400
+
+            identity_number = stored_digits.zfill(9)
+
+            if not is_valid_israeli_id(
+                identity_number
+            ):
+                return jsonify({
+                    "success": False,
+                    "error":
+                        "הוספת אפסים אינה יוצרת תעודת זהות תקינה"
+                }), 400
 
         update_member_tid_in_zebra(
             member_id,
@@ -1178,7 +1562,9 @@ def api_update_family_member_id():
             "member_id":
                 member_id,
             "tid_last4":
-                identity_number[-4:]
+                identity_number[-4:],
+            "tid_length":
+                9
         }), 200
 
     except Exception as error:
