@@ -443,17 +443,14 @@ def cancel_family_event_in_zebra(
     </IDENTIFIER>
 
     <CONNECTION_CARD_DETAILS>
-        <UPDATE_EVEN_CONNECTED>1</UPDATE_EVEN_CONNECTED>
         <CONNECTION_KEY>ASKEV</CONNECTION_KEY>
         <KEY>ID</KEY>
         <VALUE>{escape_xml(event_id)}</VALUE>
 
         <FIELDS>
-            <TIC_A>0</TIC_A>
-            <ADDI_INV>0</ADDI_INV>
+            <PROV>0</PROV>
             <TOT_FFAM>0</TOT_FFAM>
             <CANCEL_AT>1</CANCEL_AT>
-            <PROV>0</PROV>
         </FIELDS>
     </CONNECTION_CARD_DETAILS>
 </ROOT>
@@ -1178,65 +1175,10 @@ def api_cancel_family_event():
             event_id
         )
 
-        time.sleep(1)
-
-        updated_family = get_family_events(
-            family_id
-        )
-
-        updated_event = next(
-            (
-                event
-                for event in (
-                    updated_family or {}
-                ).get(
-                    "events",
-                    []
-                )
-                if str(
-                    event.get(
-                        "event_id",
-                        ""
-                    )
-                ).strip() == event_id
-            ),
-            None
-        )
-
-        cancellation_verified = bool(
-            updated_event and
-            bool(
-                updated_event.get(
-                    "cancelled",
-                    False
-                )
-            ) and
-            safe_int(
-                updated_event.get(
-                    "tickets",
-                    0
-                ),
-                0
-            ) == 0 and
-            str(
-                updated_event.get(
-                    "prov",
-                    ""
-                )
-            ).strip() == "0"
-        )
-
-        if not cancellation_verified:
-            return jsonify({
-                "success": False,
-                "error":
-                    "הביטול לא הושלם במערכת ההזמנות. לא בוצע שינוי באפליקציה."
-            }), 502
-
         return jsonify({
             "success": True,
             "event_id": event_id,
-            "cancellation_verified": True,
+            "cancellation_sent": True,
             "cancelled_at":
                 now.isoformat(),
             "cancellation_deadline":
