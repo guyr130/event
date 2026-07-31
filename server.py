@@ -449,6 +449,7 @@ def cancel_family_event_in_zebra(
     </CUST_DETAILS>
 
     <CONNECTION_CARD_DETAILS>
+        <UPDATE_EVEN_CONNECTED>1</UPDATE_EVEN_CONNECTED>
         <CONNECTION_KEY>ASKEV</CONNECTION_KEY>
         <KEY>ID</KEY>
         <VALUE>{escape_xml(event_id)}</VALUE>
@@ -456,6 +457,7 @@ def cancel_family_event_in_zebra(
         <FIELDS>
             <TIC_A>0</TIC_A>
             <ADDI_INV>0</ADDI_INV>
+            <TOT_FFAM>0</TOT_FFAM>
             <CANCEL_AT>1</CANCEL_AT>
             <PROV>0</PROV>
         </FIELDS>
@@ -503,6 +505,10 @@ def cancel_family_event_in_zebra(
             or ""
         ).strip()
 
+        response_errors = tree.findall(
+            ".//errors/error"
+        )
+
         if not message:
             raise RuntimeError(
                 "מערכת ההזמנות לא אישרה את העדכון"
@@ -525,6 +531,11 @@ def cancel_family_event_in_zebra(
         if response_identifier != family_id:
             raise RuntimeError(
                 "מערכת ההזמנות לא זיהתה את כרטיס המשפחה"
+            )
+
+        if response_errors:
+            raise RuntimeError(
+                "מערכת ההזמנות לא השלימה את הביטול"
             )
 
     except ET.ParseError:
