@@ -18,6 +18,10 @@ ZEBRA_GET_URL = (
     "https://25098.zebracrm.com/"
     "ext_interface.php?b=get_multi_cards_details"
 )
+ZEBRA_UPDATE_URL = (
+    "https://25098.zebracrm.com/"
+    "ext_interface.php?b=update_customer"
+)
 ZEBRA_USER = "IVAPP"
 ZEBRA_PASS = "1q2w3e4r"
 
@@ -186,6 +190,197 @@ def safe_int(
 
     except Exception:
         return default
+
+
+def escape_xml(
+    value
+) -> str:
+    return (
+        str(value or "")
+        .replace("&", "&amp;")
+        .replace("<", "&lt;")
+        .replace(">", "&gt;")
+        .replace('"', "&quot;")
+        .replace("'", "&apos;")
+    )
+
+
+def normalize_israeli_id(
+    value
+) -> str:
+    digits = "".join(
+        character
+        for character in str(value or "")
+        if character.isdigit()
+    )
+
+    if (
+        not digits or
+        len(digits) > 9
+    ):
+        return ""
+
+    return digits.zfill(9)
+
+
+def is_valid_israeli_id(
+    value
+) -> bool:
+    identity_number = normalize_israeli_id(
+        value
+    )
+
+    if len(identity_number) != 9:
+        return False
+
+    if identity_number == "000000000":
+        return False
+
+    total = 0
+
+    for index, character in enumerate(
+        identity_number
+    ):
+        number = int(character)
+        product = number * (
+            1 if index % 2 == 0 else 2
+        )
+
+        total += (
+            product
+            if product < 10
+            else product - 9
+        )
+
+    return total % 10 == 0
+
+
+def get_family_member_ids(
+    family_id: str
+):
+    xml_body = f"""
+<ROOT>
+    <PERMISSION>
+        <USERNAME>{escape_xml(ZEBRA_USER)}</USERNAME>
+        <PASSWORD>{escape_xml(ZEBRA_PASS)}</PASSWORD>
+    </PERMISSION>
+
+    <CARD_TYPE_FILTER>business_customer</CARD_TYPE_FILTER>
+    <ID_FILTER>{escape_xml(family_id)}</ID_FILTER>
+
+    <FIELDS>
+        <CO_NAME></CO_NAME>
+    </FIELDS>
+
+    <CONNECTION_CARDS>
+        <CONNECTION_CARD>
+            <CONNECTION_KEY>FAM</CONNECTION_KEY>
+            <FIELDS>
+                <ID></ID>
+            </FIELDS>
+        </CONNECTION_CARD>
+    </CONNECTION_CARDS>
+</ROOT>
+""".strip()
+
+    response_text = zebra_post(
+        xml_body
+    )
+
+    tree = ET.fromstring(
+        response_text
+    )
+
+    card = tree.find(
+        ".//CARDS/CARD"
+    )
+
+    if card is None:
+        return None
+
+    member_ids = set()
+    connections = card.find(
+        ".//CONNECTIONS_CARDS"
+    )
+
+    if connections is not None:
+        for connection in list(
+            connections
+        ):
+            if not connection.tag.startswith(
+                "CARD_CONNECTION_"
+            ):
+                continue
+
+            member_id = (
+                connection.findtext("ID")
+                or ""
+            ).strip()
+
+            if member_id:
+                member_ids.add(member_id)
+
+    return member_ids
+
+
+def update_member_tid_in_zebra(
+    member_id: str,
+    identity_number: str
+):
+    xml_body = f"""
+<ROOT>
+    <PERMISSION>
+        <USERNAME>{escape_xml(ZEBRA_USER)}</USERNAME>
+        <PASSWORD>{escape_xml(ZEBRA_PASS)}</PASSWORD>
+    </PERMISSION>
+
+    <CARD_TYPE>business_customer</CARD_TYPE>
+
+    <IDENTIFIER>
+        <ID>{escape_xml(member_id)}</ID>
+    </IDENTIFIER>
+
+    <CUST_DETAILS>
+        <TID>{escape_xml(identity_number)}</TID>
+    </CUST_DETAILS>
+</ROOT>
+""".strip()
+
+    response = requests.post(
+        ZEBRA_UPDATE_URL,
+        data=xml_body.encode("utf-8"),
+        headers={
+            "Content-Type":
+                "application/xml"
+        },
+        timeout=15
+    )
+
+    if response.status_code != 200:
+        raise RuntimeError(
+            "Zebra update failed with HTTP "
+            f"{response.status_code}"
+        )
+
+    response_text = response.text or ""
+
+    try:
+        tree = ET.fromstring(
+            response_text
+        )
+
+        message = (
+            tree.findtext(".//msg")
+            or ""
+        ).strip().lower()
+
+        if "error" in message or "fail" in message:
+            raise RuntimeError(
+                "Zebra rejected the identity update"
+            )
+
+    except ET.ParseError:
+        pass
 
 
 # ======================
@@ -900,6 +1095,98 @@ def api_family_members():
             "error":
                 str(error)
         }), 500
+
+
+# ======================
+# UPDATE FAMILY MEMBER ID
+# ======================
+@app.route(
+    "/api/update-family-member-id",
+    methods=["POST"]
+)
+def api_update_family_member_id():
+    data = (
+        request.get_json(
+            silent=True
+        ) or {}
+    )
+
+    family_id = str(
+        data.get("family_id") or ""
+    ).strip()
+
+    member_id = str(
+        data.get("member_id") or ""
+    ).strip()
+
+    identity_number = normalize_israeli_id(
+        data.get("identity_number")
+    )
+
+    if (
+        not family_id.isdigit() or
+        not member_id.isdigit()
+    ):
+        return jsonify({
+            "success": False,
+            "error":
+                "Invalid family or member"
+        }), 400
+
+    if family_id not in PILOT_FAMILY_IDS:
+        return jsonify({
+            "success": False,
+            "error":
+                "Family is not enabled for the pilot"
+        }), 403
+
+    if not is_valid_israeli_id(
+        identity_number
+    ):
+        return jsonify({
+            "success": False,
+            "error":
+                "מספר תעודת הזהות אינו תקין"
+        }), 400
+
+    try:
+        member_ids = get_family_member_ids(
+            family_id
+        )
+
+        if member_ids is None:
+            return jsonify({
+                "success": False,
+                "error":
+                    "Family not found in Zebra"
+            }), 404
+
+        if member_id not in member_ids:
+            return jsonify({
+                "success": False,
+                "error":
+                    "האדם שנבחר אינו שייך למשפחה"
+            }), 403
+
+        update_member_tid_in_zebra(
+            member_id,
+            identity_number
+        )
+
+        return jsonify({
+            "success": True,
+            "member_id":
+                member_id,
+            "tid_last4":
+                identity_number[-4:]
+        }), 200
+
+    except Exception as error:
+        return jsonify({
+            "success": False,
+            "error":
+                str(error)
+        }), 502
 
 
 # ======================
