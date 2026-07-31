@@ -1177,9 +1177,65 @@ def api_cancel_family_event():
             event_id
         )
 
+        cancellation_verified = False
+
+        for verification_attempt in range(4):
+            if verification_attempt > 0:
+                time.sleep(1)
+
+            updated_family = get_family_events(
+                family_id
+            )
+
+            updated_event = next(
+                (
+                    event
+                    for event in (
+                        updated_family or {}
+                    ).get(
+                        "events",
+                        []
+                    )
+                    if str(
+                        event.get(
+                            "event_id",
+                            ""
+                        )
+                    ).strip() == event_id
+                ),
+                None
+            )
+
+            if (
+                updated_event and
+                bool(
+                    updated_event.get(
+                        "cancelled",
+                        False
+                    )
+                ) and
+                safe_int(
+                    updated_event.get(
+                        "tickets",
+                        0
+                    ),
+                    0
+                ) == 0
+            ):
+                cancellation_verified = True
+                break
+
+        if not cancellation_verified:
+            return jsonify({
+                "success": False,
+                "error":
+                    "הביטול נשלח, אך תיבת ביטול השתתפות לא סומנה במערכת"
+            }), 502
+
         return jsonify({
             "success": True,
             "event_id": event_id,
+            "cancellation_verified": True,
             "cancelled_at":
                 now.isoformat(),
             "cancellation_deadline":
