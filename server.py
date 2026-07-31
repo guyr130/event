@@ -439,8 +439,12 @@ def cancel_family_event_in_zebra(
     <CARD_TYPE>business_customer</CARD_TYPE>
 
     <IDENTIFIER>
-        <ID>{escape_xml(family_id)}</ID>
+        <KEY>ID</KEY>
+        <VALUE>{escape_xml(family_id)}</VALUE>
     </IDENTIFIER>
+
+    <CUST_DETAILS>
+    </CUST_DETAILS>
 
     <CONNECTION_CARD_DETAILS>
         <CONNECTION_KEY>ASKEV</CONNECTION_KEY>
@@ -473,7 +477,14 @@ def cancel_family_event_in_zebra(
             f"{response.status_code}"
         )
 
-    response_text = response.text or ""
+    response_text = (
+        response.text or ""
+    ).strip()
+
+    if not response_text:
+        raise RuntimeError(
+            "מערכת ההזמנות החזירה תשובה ריקה"
+        )
 
     try:
         tree = ET.fromstring(
@@ -485,16 +496,28 @@ def cancel_family_event_in_zebra(
             or ""
         ).strip().lower()
 
-        if (
-            "error" in message or
-            "fail" in message
+        if not message:
+            raise RuntimeError(
+                "מערכת ההזמנות לא אישרה את העדכון"
+            )
+
+        if any(
+            marker in message
+            for marker in (
+                "error",
+                "fail",
+                "not found",
+                "failed"
+            )
         ):
             raise RuntimeError(
-                "Zebra rejected the cancellation"
+                "מערכת ההזמנות דחתה את הביטול"
             )
 
     except ET.ParseError:
-        pass
+        raise RuntimeError(
+            "מערכת ההזמנות החזירה תשובה לא תקינה"
+        )
 
 
 # ======================
@@ -1176,10 +1199,60 @@ def api_cancel_family_event():
             event_id
         )
 
+        updated_family = get_family_events(
+            family_id
+        )
+
+        updated_event = next(
+            (
+                event
+                for event in (
+                    updated_family or {}
+                ).get(
+                    "events",
+                    []
+                )
+                if str(
+                    event.get(
+                        "event_id",
+                        ""
+                    )
+                ).strip() == event_id
+            ),
+            None
+        )
+
+        cancellation_confirmed = bool(
+            updated_event and
+            updated_event.get(
+                "cancelled",
+                False
+            ) and
+            safe_int(
+                updated_event.get(
+                    "tickets",
+                    0
+                ),
+                0
+            ) == 0 and
+            str(
+                updated_event.get(
+                    "prov",
+                    ""
+                )
+            ).strip() == "0"
+        )
+
+        if not cancellation_confirmed:
+            raise RuntimeError(
+                "הביטול לא נשמר במערכת ההזמנות. "
+                "הרישום נשאר פעיל."
+            )
+
         return jsonify({
             "success": True,
             "event_id": event_id,
-            "cancellation_sent": True,
+            "cancellation_confirmed": True,
             "cancelled_at":
                 now.isoformat(),
             "cancellation_deadline":
