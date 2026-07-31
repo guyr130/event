@@ -1,10 +1,12 @@
 # -*- coding: utf-8 -*-
 from flask import Flask, request, render_template, jsonify
-import requests
-import xml.etree.ElementTree as ET
+import base64
 from datetime import datetime
 import time
-import base64
+import xml.etree.ElementTree as ET
+
+import requests
+
 
 app = Flask(__name__)
 app.config["MAX_CONTENT_LENGTH"] = 5 * 1024 * 1024
@@ -27,6 +29,15 @@ GOOGLE_SHEETS_WEBAPP_URL = (
     "AKfycbwWHwPHR8DMKAdm2oGx2m3OSW35KwDO3vBgFugxjkD70nbOZf0bjaAODWSNtRidICJT/"
     "exec"
 )
+
+# ======================
+# PILOT FAMILIES
+# ======================
+PILOT_FAMILY_IDS = {
+    "22442",
+    "21604",
+    "21744"
+}
 
 # ======================
 # FILE CONFIG
@@ -62,13 +73,15 @@ def is_duplicate(
     )
 
     expired = [
-        k
-        for k, v in recent_requests.items()
-        if now - v > IDEMPOTENCY_WINDOW
+        item_key
+        for item_key, created_at
+        in recent_requests.items()
+        if now - created_at >
+        IDEMPOTENCY_WINDOW
     ]
 
-    for k in expired:
-        del recent_requests[k]
+    for item_key in expired:
+        del recent_requests[item_key]
 
     if key in recent_requests:
         return True
@@ -97,16 +110,16 @@ def zebra_post(
 def parse_ddmmyyyy(
     date_str: str
 ):
-    date_str = (
+    value = (
         date_str or ""
     ).strip()
 
-    if not date_str:
+    if not value:
         return None
 
     try:
         return datetime.strptime(
-            date_str,
+            value,
             "%d/%m/%Y"
         ).date()
 
@@ -129,7 +142,10 @@ def allowed_file(
         .lower()
     )
 
-    return extension in ALLOWED_EXTENSIONS
+    return (
+        extension in
+        ALLOWED_EXTENSIONS
+    )
 
 
 def normalize_status(
@@ -185,6 +201,7 @@ def get_family_events(
         <PASSWORD>{ZEBRA_PASS}</PASSWORD>
     </PERMISSION>
 
+    <CARD_TYPE_FILTER>business_customer</CARD_TYPE_FILTER>
     <ID_FILTER>{family_id}</ID_FILTER>
 
     <FIELDS>
@@ -347,12 +364,14 @@ def filter_events(
     valid = []
 
     for event in events:
-        if str(
+        prov = str(
             event.get(
                 "prov",
                 ""
             )
-        ).strip() != "1":
+        ).strip()
+
+        if prov != "1":
             continue
 
         event_date = parse_ddmmyyyy(
@@ -372,31 +391,21 @@ def filter_events(
             event
         )
 
-    def sort_key(
-        event
-    ):
-        event_date = (
+    valid.sort(
+        key=lambda event: (
             parse_ddmmyyyy(
                 event.get(
                     "event_date",
                     ""
                 )
-            ) or today
+            ) or today,
+
+            (
+                event.get(
+                    "event_time"
+                ) or "00:00"
+            ).strip()
         )
-
-        event_time = (
-            event.get(
-                "event_time"
-            ) or "00:00"
-        ).strip()
-
-        return (
-            event_date,
-            event_time
-        )
-
-    valid.sort(
-        key=sort_key
     )
 
     return valid
@@ -558,15 +567,20 @@ def api_family_events():
         ) or ""
     ).strip()
 
-    if not family_id:
+    if (
+        not family_id or
+        not family_id.isdigit()
+    ):
         return jsonify({
             "success": False,
             "error":
-                "Missing family_id"
+                "Invalid family_id"
         }), 400
 
-    # משפחת הניסוי
-    if family_id != "21744":
+    if (
+        family_id not in
+        PILOT_FAMILY_IDS
+    ):
         return jsonify({
             "success": False,
             "error":
@@ -707,11 +721,10 @@ def api_family_members():
                 "Invalid family_id"
         }), 400
 
-    # משפחות הניסוי בלבד
-    if family_id not in {
-        "22442",
-        "21604"
-    }:
+    if (
+        family_id not in
+        PILOT_FAMILY_IDS
+    ):
         return jsonify({
             "success": False,
             "error":
@@ -725,6 +738,7 @@ def api_family_members():
         <PASSWORD>{ZEBRA_PASS}</PASSWORD>
     </PERMISSION>
 
+    <CARD_TYPE_FILTER>business_customer</CARD_TYPE_FILTER>
     <ID_FILTER>{family_id}</ID_FILTER>
 
     <FIELDS>
