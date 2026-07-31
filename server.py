@@ -566,7 +566,7 @@ def api_family_events():
         }), 400
 
     # משפחת הניסוי
-    if family_id != "21604":
+    if family_id != "21744":
         return jsonify({
             "success": False,
             "error":
