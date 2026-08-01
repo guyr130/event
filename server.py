@@ -279,6 +279,7 @@ def get_family_member_records(
             <FIELDS>
                 <ID></ID>
                 <TID></TID>
+                <REL_F></REL_F>
             </FIELDS>
         </CONNECTION_CARD>
     </CONNECTION_CARDS>
@@ -325,9 +326,16 @@ def get_family_member_records(
                 ) or ""
             ).strip()
 
+            relation = (
+                connection.findtext(
+                    ".//FIELDS/REL_F"
+                ) or ""
+            ).strip()
+
             if member_id:
                 members[member_id] = {
-                    "tid": tid
+                    "tid": tid,
+                    "relation": relation
                 }
 
     return members
@@ -1351,6 +1359,7 @@ def api_family_members():
                 <F_N></F_N>
                 <CELL></CELL>
                 <TID></TID>
+                <REL_F></REL_F>
             </FIELDS>
         </CONNECTION_CARD>
     </CONNECTION_CARDS>
@@ -1434,6 +1443,12 @@ def api_family_members():
                     ) or ""
                 ).strip()
 
+                relation = (
+                    connection.findtext(
+                        ".//FIELDS/REL_F"
+                    ) or ""
+                ).strip()
+
                 if not member_id:
                     continue
 
@@ -1488,6 +1503,9 @@ def api_family_members():
 
                     "tid_length":
                         tid_length,
+
+                    "relation":
+                        relation,
 
                     "missing_leading_zeros": (
                         missing_leading_zeros
