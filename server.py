@@ -1193,6 +1193,138 @@ def update_family_event_registration_state_in_zebra(
 
 
 # ======================
+# OPTIONAL ARRIVAL DETAILS FROM ZEBRA
+# ======================
+def get_family_arrival_details(
+    family_id: str
+):
+    """
+    Read arrival-confirmation fields in a separate request.
+
+    This request is deliberately isolated from the stable events
+    query. If Zebra rejects it, the events screen still loads and
+    simply returns no arrival state for that refresh.
+    """
+    xml_body = f"""
+<ROOT>
+    <PERMISSION>
+        <USERNAME>{ZEBRA_USER}</USERNAME>
+        <PASSWORD>{ZEBRA_PASS}</PASSWORD>
+    </PERMISSION>
+
+    <CARD_TYPE_FILTER>business_customer</CARD_TYPE_FILTER>
+    <ID_FILTER>{family_id}</ID_FILTER>
+
+    <FIELDS>
+        <CO_NAME></CO_NAME>
+    </FIELDS>
+
+    <CONNECTION_CARDS>
+        <CONNECTION_CARD>
+            <CONNECTION_KEY>ASKEV</CONNECTION_KEY>
+
+            <FIELDS>
+                <ID></ID>
+            </FIELDS>
+
+            <CON_FIELDS>
+                <A_C></A_C>
+                <A_D></A_D>
+                <NO_ARIVE></NO_ARIVE>
+            </CON_FIELDS>
+        </CONNECTION_CARD>
+    </CONNECTION_CARDS>
+</ROOT>
+""".strip()
+
+    try:
+        response_text = zebra_post(
+            xml_body
+        )
+
+        if not (
+            response_text or ""
+        ).strip():
+            app.logger.warning(
+                "Zebra returned an empty arrival-details response"
+            )
+            return {}
+
+        tree = ET.fromstring(
+            response_text
+        )
+
+        card = tree.find(
+            ".//CARDS/CARD"
+        )
+
+        if card is None:
+            return {}
+
+        result = {}
+        connections = card.find(
+            ".//CONNECTIONS_CARDS"
+        )
+
+        if connections is None:
+            return result
+
+        for connection in list(
+            connections
+        ):
+            if not connection.tag.startswith(
+                "CARD_CONNECTION_"
+            ):
+                continue
+
+            event_id = (
+                connection.findtext(
+                    "ID"
+                ) or ""
+            ).strip()
+
+            if not event_id:
+                continue
+
+            status = (
+                connection.findtext(
+                    ".//CON_FIELDS/A_C"
+                ) or ""
+            ).strip()
+
+            confirmed_at = (
+                connection.findtext(
+                    ".//CON_FIELDS/A_D"
+                ) or ""
+            ).strip()
+
+            arriving = safe_int(
+                connection.findtext(
+                    ".//CON_FIELDS/NO_ARIVE"
+                ) or "0",
+                0
+            )
+
+            result[event_id] = {
+                "arrival_status": status,
+                "arrival_date": confirmed_at,
+                "arriving": arriving,
+                "arrival_confirmed": (
+                    status == "אישרו"
+                )
+            }
+
+        return result
+
+    except Exception as error:
+        app.logger.warning(
+            "Optional Zebra arrival-details query failed: %s",
+            error
+        )
+        return {}
+
+
+# ======================
 # FAMILY EVENTS FROM ZEBRA
 # ======================
 def get_family_events(
@@ -1372,6 +1504,47 @@ def get_family_events(
                     cancel_at == "1"
                 )
             })
+
+    arrival_details = get_family_arrival_details(
+        family_id
+    )
+
+    for event in events:
+        details = arrival_details.get(
+            event.get(
+                "event_id",
+                ""
+            ),
+            {}
+        )
+
+        event.update({
+            "arrival_status": str(
+                details.get(
+                    "arrival_status",
+                    ""
+                )
+            ).strip(),
+            "arrival_date": str(
+                details.get(
+                    "arrival_date",
+                    ""
+                )
+            ).strip(),
+            "arriving": safe_int(
+                details.get(
+                    "arriving",
+                    0
+                ),
+                0
+            ),
+            "arrival_confirmed": bool(
+                details.get(
+                    "arrival_confirmed",
+                    False
+                )
+            )
+        })
 
     return {
         "family_id":
@@ -1804,6 +1977,35 @@ def api_family_events():
                     "cancelled",
                     False
                 )
+            ),
+
+            "arrival_status": str(
+                event.get(
+                    "arrival_status",
+                    ""
+                )
+            ).strip(),
+
+            "arrival_confirmed": bool(
+                event.get(
+                    "arrival_confirmed",
+                    False
+                )
+            ),
+
+            "arrival_date": str(
+                event.get(
+                    "arrival_date",
+                    ""
+                )
+            ).strip(),
+
+            "arriving": safe_int(
+                event.get(
+                    "arriving",
+                    0
+                ),
+                0
             )
         })
 
