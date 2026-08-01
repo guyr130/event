@@ -2,6 +2,10 @@
 from flask import Flask, request, render_template, jsonify
 import base64
 from datetime import datetime, timedelta
+import hashlib
+import hmac
+import json
+import os
 import time
 import xml.etree.ElementTree as ET
 from zoneinfo import ZoneInfo
@@ -43,6 +47,17 @@ PILOT_FAMILY_IDS = {
     "21604",
     "21774"
 }
+
+# ======================
+# FAMILY AUTHENTICATION
+# ======================
+FAMILY_SESSION_TTL_SECONDS = (
+    90 * 24 * 60 * 60
+)
+
+AUTH_ATTEMPT_WINDOW_SECONDS = 15 * 60
+AUTH_MAX_FAILED_ATTEMPTS = 8
+failed_auth_attempts = {}
 
 # ======================
 # FILE CONFIG
@@ -224,6 +239,227 @@ def normalize_israeli_id(
     return digits.zfill(9)
 
 
+def normalize_mobile_phone(
+    value
+) -> str:
+    digits = "".join(
+        character
+        for character in str(value or "")
+        if character.isdigit()
+    )
+
+    if digits.startswith("00972"):
+        digits = digits[2:]
+
+    if (
+        digits.startswith("972") and
+        len(digits) == 12
+    ):
+        digits = "0" + digits[3:]
+
+    if (
+        len(digits) == 9 and
+        digits.startswith("5")
+    ):
+        digits = "0" + digits
+
+    if (
+        len(digits) != 10 or
+        not digits.startswith("05")
+    ):
+        return ""
+
+    return digits
+
+
+def base64url_encode(
+    value: bytes
+) -> str:
+    return (
+        base64.urlsafe_b64encode(value)
+        .decode("ascii")
+        .rstrip("=")
+    )
+
+
+def base64url_decode(
+    value: str
+) -> bytes:
+    padding = "=" * (
+        (-len(value)) % 4
+    )
+
+    return base64.urlsafe_b64decode(
+        value + padding
+    )
+
+
+def get_family_session_secret() -> bytes:
+    secret = os.environ.get(
+        "FAMILY_SESSION_SECRET",
+        ""
+    ).strip()
+
+    if len(secret) < 32:
+        raise RuntimeError(
+            "FAMILY_SESSION_SECRET is not configured"
+        )
+
+    return secret.encode("utf-8")
+
+
+def create_family_session_token(
+    family_id: str
+) -> str:
+    payload = {
+        "v": 1,
+        "family_id": str(family_id),
+        "exp": int(time.time()) +
+            FAMILY_SESSION_TTL_SECONDS
+    }
+
+    encoded_payload = base64url_encode(
+        json.dumps(
+            payload,
+            ensure_ascii=False,
+            separators=(",", ":")
+        ).encode("utf-8")
+    )
+
+    signature = hmac.new(
+        get_family_session_secret(),
+        encoded_payload.encode("ascii"),
+        hashlib.sha256
+    ).digest()
+
+    return (
+        encoded_payload + "." +
+        base64url_encode(signature)
+    )
+
+
+def verify_family_session_token(
+    token: str
+):
+    try:
+        encoded_payload, encoded_signature = (
+            str(token or "").split(".", 1)
+        )
+
+        expected_signature = hmac.new(
+            get_family_session_secret(),
+            encoded_payload.encode("ascii"),
+            hashlib.sha256
+        ).digest()
+
+        supplied_signature = base64url_decode(
+            encoded_signature
+        )
+
+        if not hmac.compare_digest(
+            supplied_signature,
+            expected_signature
+        ):
+            return None
+
+        payload = json.loads(
+            base64url_decode(
+                encoded_payload
+            ).decode("utf-8")
+        )
+
+        family_id = str(
+            payload.get("family_id") or ""
+        ).strip()
+
+        if (
+            payload.get("v") != 1 or
+            not family_id.isdigit() or
+            int(payload.get("exp") or 0) <=
+                int(time.time())
+        ):
+            return None
+
+        return {
+            "family_id": family_id,
+            "expires_at": int(
+                payload.get("exp")
+            )
+        }
+
+    except Exception:
+        return None
+
+
+def bearer_family_session():
+    authorization = str(
+        request.headers.get(
+            "Authorization",
+            ""
+        ) or ""
+    ).strip()
+
+    if not authorization.lower().startswith(
+        "bearer "
+    ):
+        return None
+
+    return verify_family_session_token(
+        authorization[7:].strip()
+    )
+
+
+def auth_attempt_key(
+    phone: str
+) -> str:
+    remote_address = str(
+        request.headers.get(
+            "X-Forwarded-For",
+            request.remote_addr or ""
+        )
+    ).split(",", 1)[0].strip()
+
+    return hashlib.sha256(
+        f"{remote_address}|{phone}".encode(
+            "utf-8"
+        )
+    ).hexdigest()
+
+
+def auth_attempt_is_blocked(
+    key: str
+) -> bool:
+    now = time.time()
+    recent = [
+        attempt_time
+        for attempt_time in
+        failed_auth_attempts.get(key, [])
+        if now - attempt_time <
+            AUTH_ATTEMPT_WINDOW_SECONDS
+    ]
+
+    failed_auth_attempts[key] = recent
+
+    return len(recent) >= (
+        AUTH_MAX_FAILED_ATTEMPTS
+    )
+
+
+def record_failed_auth_attempt(
+    key: str
+):
+    failed_auth_attempts.setdefault(
+        key,
+        []
+    ).append(time.time())
+
+
+def clear_failed_auth_attempts(
+    key: str
+):
+    failed_auth_attempts.pop(key, None)
+
+
 def is_valid_israeli_id(
     value
 ) -> bool:
@@ -279,6 +515,7 @@ def get_family_member_records(
             <FIELDS>
                 <ID></ID>
                 <TID></TID>
+                <CELL></CELL>
                 <REL_F></REL_F>
             </FIELDS>
         </CONNECTION_CARD>
@@ -332,13 +569,185 @@ def get_family_member_records(
                 ) or ""
             ).strip()
 
+            phone = (
+                connection.findtext(
+                    ".//FIELDS/CELL"
+                ) or ""
+            ).strip()
+
             if member_id:
                 members[member_id] = {
                     "tid": tid,
+                    "phone": phone,
                     "relation": relation
                 }
 
     return members
+
+
+def find_pilot_family_by_credentials(
+    identity_number: str,
+    phone: str
+):
+    matches = []
+
+    for family_id in sorted(
+        PILOT_FAMILY_IDS
+    ):
+        member_records = get_family_member_records(
+            family_id
+        )
+
+        if member_records is None:
+            continue
+
+        family_matches = any(
+            normalize_israeli_id(
+                member.get("tid")
+            ) == identity_number and
+            normalize_mobile_phone(
+                member.get("phone")
+            ) == phone
+            for member in member_records.values()
+        )
+
+        if family_matches:
+            matches.append(family_id)
+
+    if len(matches) != 1:
+        return ""
+
+    return matches[0]
+
+
+# ======================
+# FAMILY AUTHENTICATION API
+# ======================
+@app.route(
+    "/api/authenticate-family",
+    methods=["POST"]
+)
+def api_authenticate_family():
+    data = (
+        request.get_json(
+            silent=True
+        ) or {}
+    )
+
+    raw_identity_number = str(
+        data.get("identity_number") or ""
+    )
+
+    raw_identity_digits = "".join(
+        character
+        for character in raw_identity_number
+        if character.isdigit()
+    )
+
+    identity_number = normalize_israeli_id(
+        raw_identity_number
+    )
+
+    phone = normalize_mobile_phone(
+        data.get("phone")
+    )
+
+    generic_error = {
+        "success": False,
+        "error":
+            "לא הצלחנו לזהות את הפרטים. אפשר לפנות אלינו בוואטסאפ."
+    }
+
+    if (
+        len(raw_identity_digits) < 6 or
+        not identity_number or
+        not phone
+    ):
+        return jsonify(generic_error), 401
+
+    attempt_key = auth_attempt_key(
+        phone
+    )
+
+    if auth_attempt_is_blocked(
+        attempt_key
+    ):
+        return jsonify({
+            "success": False,
+            "error":
+                "בוצעו יותר מדי ניסיונות. אפשר לנסות שוב מאוחר יותר או לפנות בוואטסאפ."
+        }), 429
+
+    try:
+        get_family_session_secret()
+
+        family_id = find_pilot_family_by_credentials(
+            identity_number,
+            phone
+        )
+
+        if not family_id:
+            record_failed_auth_attempt(
+                attempt_key
+            )
+
+            return jsonify(generic_error), 401
+
+        clear_failed_auth_attempts(
+            attempt_key
+        )
+
+        return jsonify({
+            "success": True,
+            "session_token":
+                create_family_session_token(
+                    family_id
+                ),
+            "expires_in":
+                FAMILY_SESSION_TTL_SECONDS
+        })
+
+    except RuntimeError as error:
+        if (
+            "FAMILY_SESSION_SECRET" in
+            str(error)
+        ):
+            return jsonify({
+                "success": False,
+                "error":
+                    "שירות הזיהוי עדיין אינו מוגדר"
+            }), 503
+
+        return jsonify(generic_error), 502
+
+    except Exception:
+        return jsonify(generic_error), 502
+
+
+@app.route("/api/session-family")
+def api_session_family():
+    session = bearer_family_session()
+
+    if not session:
+        return jsonify({
+            "success": False,
+            "error": "הכניסה פגה"
+        }), 401
+
+    family_id = session["family_id"]
+
+    if family_id not in PILOT_FAMILY_IDS:
+        return jsonify({
+            "success": False,
+            "error":
+                "המשפחה אינה פעילה בפיילוט"
+        }), 403
+
+    return jsonify({
+        "success": True,
+        "family_id": family_id,
+        "expires_at": session["expires_at"]
+    })
 
 
 def update_member_tid_in_zebra(
