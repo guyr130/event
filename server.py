@@ -1223,7 +1223,6 @@ def get_family_events(
                 <EVE_HOUR></EVE_HOUR>
                 <EVE_LOC></EVE_LOC>
                 <AUTO_PROV></AUTO_PROV>
-                <CONFIRM_ARRIVE></CONFIRM_ARRIVE>
             </FIELDS>
 
             <CON_FIELDS>
@@ -1231,9 +1230,6 @@ def get_family_events(
                 <PROV></PROV>
                 <FULL_N></FULL_N>
                 <CANCEL_AT></CANCEL_AT>
-                <A_C></A_C>
-                <A_D></A_D>
-                <NO_ARIVE></NO_ARIVE>
             </CON_FIELDS>
         </CONNECTION_CARD>
     </CONNECTION_CARDS>
@@ -1244,83 +1240,9 @@ def get_family_events(
         xml_body
     )
 
-    try:
-        if not (
-            response_text or ""
-        ).strip():
-            raise ET.ParseError(
-                "empty Zebra response"
-            )
-
-        tree = ET.fromstring(
-            response_text
-        )
-    except ET.ParseError:
-        # Zebra may reject the complete request when one optional
-        # field is unavailable. Retry with the last known-good
-        # field set so the events screen remains available.
-        app.logger.warning(
-            "Zebra rejected the expanded family-events query; "
-            "retrying with the legacy field set"
-        )
-
-        legacy_xml_body = f"""
-<ROOT>
-    <PERMISSION>
-        <USERNAME>{ZEBRA_USER}</USERNAME>
-        <PASSWORD>{ZEBRA_PASS}</PASSWORD>
-    </PERMISSION>
-
-    <CARD_TYPE_FILTER>business_customer</CARD_TYPE_FILTER>
-    <ID_FILTER>{family_id}</ID_FILTER>
-
-    <FIELDS>
-        <CO_NAME></CO_NAME>
-    </FIELDS>
-
-    <CONNECTION_CARDS>
-        <CONNECTION_CARD>
-            <CONNECTION_KEY>ASKEV</CONNECTION_KEY>
-
-            <FIELDS>
-                <ID></ID>
-                <EV_N></EV_N>
-                <EV_D></EV_D>
-                <EVE_HOUR></EVE_HOUR>
-                <EVE_LOC></EVE_LOC>
-                <AUTO_PROV></AUTO_PROV>
-            </FIELDS>
-
-            <CON_FIELDS>
-                <TOT_FFAM></TOT_FFAM>
-                <PROV></PROV>
-                <FULL_N></FULL_N>
-                <CANCEL_AT></CANCEL_AT>
-            </CON_FIELDS>
-        </CONNECTION_CARD>
-    </CONNECTION_CARDS>
-</ROOT>
-""".strip()
-
-        fallback_response = zebra_post(
-            legacy_xml_body
-        )
-
-        if not (
-            fallback_response or ""
-        ).strip():
-            raise RuntimeError(
-                "מערכת ההזמנות החזירה תשובה ריקה"
-            )
-
-        try:
-            tree = ET.fromstring(
-                fallback_response
-            )
-        except ET.ParseError as exc:
-            raise RuntimeError(
-                "מערכת ההזמנות החזירה תשובה לא תקינה"
-            ) from exc
+    tree = ET.fromstring(
+        response_text
+    )
 
     card = tree.find(
         ".//CARDS/CARD"
@@ -1415,31 +1337,6 @@ def get_family_events(
                 ) or ""
             ).strip()
 
-            confirm_arrive = (
-                connection.findtext(
-                    ".//FIELDS/CONFIRM_ARRIVE"
-                ) or ""
-            ).strip()
-
-            arrival_status = (
-                connection.findtext(
-                    ".//CON_FIELDS/A_C"
-                ) or ""
-            ).strip()
-
-            arrival_date = (
-                connection.findtext(
-                    ".//CON_FIELDS/A_D"
-                ) or ""
-            ).strip()
-
-            arriving = safe_int(
-                connection.findtext(
-                    ".//CON_FIELDS/NO_ARIVE"
-                ) or "0",
-                0
-            )
-
             events.append({
                 "event_id":
                     event_id,
@@ -1470,22 +1367,6 @@ def get_family_events(
                         auto_prov
                     ) == "yes"
                 ),
-
-                "confirm_arrive":
-                    confirm_arrive,
-
-                "arrival_status":
-                    arrival_status,
-
-                "arrival_confirmed": (
-                    arrival_status == "אישרו"
-                ),
-
-                "arrival_date":
-                    arrival_date,
-
-                "arriving":
-                    arriving,
 
                 "cancelled": (
                     cancel_at == "1"
@@ -1923,42 +1804,6 @@ def api_family_events():
                     "cancelled",
                     False
                 )
-            ),
-
-            "confirm_arrive": str(
-                event.get(
-                    "confirm_arrive",
-                    ""
-                )
-            ).strip(),
-
-            "arrival_status": str(
-                event.get(
-                    "arrival_status",
-                    ""
-                )
-            ).strip(),
-
-            "arrival_confirmed": bool(
-                event.get(
-                    "arrival_confirmed",
-                    False
-                )
-            ),
-
-            "arrival_date": str(
-                event.get(
-                    "arrival_date",
-                    ""
-                )
-            ).strip(),
-
-            "arriving": safe_int(
-                event.get(
-                    "arriving",
-                    0
-                ),
-                0
             )
         })
 
