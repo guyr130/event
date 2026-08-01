@@ -1223,6 +1223,7 @@ def get_family_events(
                 <EVE_HOUR></EVE_HOUR>
                 <EVE_LOC></EVE_LOC>
                 <AUTO_PROV></AUTO_PROV>
+                <CONFIRM_ARRIVE></CONFIRM_ARRIVE>
             </FIELDS>
 
             <CON_FIELDS>
@@ -1230,6 +1231,9 @@ def get_family_events(
                 <PROV></PROV>
                 <FULL_N></FULL_N>
                 <CANCEL_AT></CANCEL_AT>
+                <A_C></A_C>
+                <A_D></A_D>
+                <NO_ARIVE></NO_ARIVE>
             </CON_FIELDS>
         </CONNECTION_CARD>
     </CONNECTION_CARDS>
@@ -1337,6 +1341,31 @@ def get_family_events(
                 ) or ""
             ).strip()
 
+            confirm_arrive = (
+                connection.findtext(
+                    ".//FIELDS/CONFIRM_ARRIVE"
+                ) or ""
+            ).strip()
+
+            arrival_status = (
+                connection.findtext(
+                    ".//CON_FIELDS/A_C"
+                ) or ""
+            ).strip()
+
+            arrival_date = (
+                connection.findtext(
+                    ".//CON_FIELDS/A_D"
+                ) or ""
+            ).strip()
+
+            arriving = safe_int(
+                connection.findtext(
+                    ".//CON_FIELDS/NO_ARIVE"
+                ) or "0",
+                0
+            )
+
             events.append({
                 "event_id":
                     event_id,
@@ -1367,6 +1396,22 @@ def get_family_events(
                         auto_prov
                     ) == "yes"
                 ),
+
+                "confirm_arrive":
+                    confirm_arrive,
+
+                "arrival_status":
+                    arrival_status,
+
+                "arrival_confirmed": (
+                    arrival_status == "אישרו"
+                ),
+
+                "arrival_date":
+                    arrival_date,
+
+                "arriving":
+                    arriving,
 
                 "cancelled": (
                     cancel_at == "1"
@@ -1804,6 +1849,42 @@ def api_family_events():
                     "cancelled",
                     False
                 )
+            ),
+
+            "confirm_arrive": str(
+                event.get(
+                    "confirm_arrive",
+                    ""
+                )
+            ).strip(),
+
+            "arrival_status": str(
+                event.get(
+                    "arrival_status",
+                    ""
+                )
+            ).strip(),
+
+            "arrival_confirmed": bool(
+                event.get(
+                    "arrival_confirmed",
+                    False
+                )
+            ),
+
+            "arrival_date": str(
+                event.get(
+                    "arrival_date",
+                    ""
+                )
+            ).strip(),
+
+            "arriving": safe_int(
+                event.get(
+                    "arriving",
+                    0
+                ),
+                0
             )
         })
 
