@@ -40,15 +40,6 @@ GOOGLE_SHEETS_WEBAPP_URL = (
 )
 
 # ======================
-# PILOT FAMILIES
-# ======================
-PILOT_FAMILY_IDS = {
-    "22442",
-    "21604",
-    "21774"
-}
-
-# ======================
 # FAMILY AUTHENTICATION
 # ======================
 FAMILY_SESSION_TTL_SECONDS = (
@@ -409,6 +400,20 @@ def bearer_family_session():
     )
 
 
+def family_session_matches(
+    family_id: str
+) -> bool:
+    session = bearer_family_session()
+
+    if not session:
+        return False
+
+    return hmac.compare_digest(
+        str(session.get("family_id") or ""),
+        str(family_id or "")
+    )
+
+
 def auth_attempt_key(
     phone: str
 ) -> str:
@@ -585,39 +590,136 @@ def get_family_member_records(
     return members
 
 
-def find_pilot_family_by_credentials(
+def identity_number_candidates(
+    identity_number: str
+):
+    normalized = normalize_israeli_id(
+        identity_number
+    )
+
+    if not normalized:
+        return []
+
+    candidates = []
+    candidate = normalized
+
+    while len(candidate) >= 6:
+        candidates.append(candidate)
+
+        if not candidate.startswith("0"):
+            break
+
+        candidate = candidate[1:]
+
+    return candidates
+
+
+def find_family_by_credentials(
     identity_number: str,
     phone: str
 ):
-    matches = []
+    matches = set()
 
-    for family_id in sorted(
-        PILOT_FAMILY_IDS
+    for tid_candidate in (
+        identity_number_candidates(
+            identity_number
+        )
     ):
-        member_records = get_family_member_records(
-            family_id
+        xml_body = f"""
+<ROOT>
+    <PERMISSION>
+        <USERNAME>{escape_xml(ZEBRA_USER)}</USERNAME>
+        <PASSWORD>{escape_xml(ZEBRA_PASS)}</PASSWORD>
+    </PERMISSION>
+
+    <CARD_TYPE_FILTER>private_customer</CARD_TYPE_FILTER>
+
+    <FILTERS>
+        <TID>{escape_xml(tid_candidate)}</TID>
+    </FILTERS>
+
+    <ID></ID>
+
+    <FIELDS>
+        <TID></TID>
+        <CELL></CELL>
+    </FIELDS>
+
+    <CONNECTION_CARDS>
+        <CONNECTION_CARD>
+            <CONNECTION_KEY>FAM</CONNECTION_KEY>
+            <FIELDS>
+                <ID></ID>
+                <CO_NAME></CO_NAME>
+            </FIELDS>
+        </CONNECTION_CARD>
+    </CONNECTION_CARDS>
+</ROOT>
+""".strip()
+
+        response_text = zebra_post(
+            xml_body
         )
 
-        if member_records is None:
-            continue
-
-        family_matches = any(
-            normalize_israeli_id(
-                member.get("tid")
-            ) == identity_number and
-            normalize_mobile_phone(
-                member.get("phone")
-            ) == phone
-            for member in member_records.values()
+        tree = ET.fromstring(
+            response_text
         )
 
-        if family_matches:
-            matches.append(family_id)
+        for card in tree.findall(
+            ".//CARDS/CARD"
+        ):
+            stored_tid = (
+                card.findtext(
+                    "./FIELDS/TID"
+                ) or ""
+            ).strip()
+
+            stored_phone = (
+                card.findtext(
+                    "./FIELDS/CELL"
+                ) or ""
+            ).strip()
+
+            if (
+                normalize_israeli_id(
+                    stored_tid
+                ) != identity_number or
+                normalize_mobile_phone(
+                    stored_phone
+                ) != phone
+            ):
+                continue
+
+            connections = card.find(
+                "./CONNECTIONS_CARDS"
+            )
+
+            if connections is None:
+                continue
+
+            for connection in list(
+                connections
+            ):
+                if not connection.tag.startswith(
+                    "CARD_CONNECTION_"
+                ):
+                    continue
+
+                family_id = (
+                    connection.findtext("ID")
+                    or ""
+                ).strip()
+
+                if family_id.isdigit():
+                    matches.add(family_id)
+
+        if len(matches) > 1:
+            break
 
     if len(matches) != 1:
         return ""
 
-    return matches[0]
+    return next(iter(matches))
 
 
 # ======================
@@ -681,7 +783,7 @@ def api_authenticate_family():
     try:
         get_family_session_secret()
 
-        family_id = find_pilot_family_by_credentials(
+        family_id = find_family_by_credentials(
             identity_number,
             phone
         )
@@ -736,13 +838,6 @@ def api_session_family():
 
     family_id = session["family_id"]
 
-    if family_id not in PILOT_FAMILY_IDS:
-        return jsonify({
-            "success": False,
-            "error":
-                "המשפחה אינה פעילה בפיילוט"
-        }), 403
-
     return jsonify({
         "success": True,
         "family_id": family_id,
@@ -761,7 +856,7 @@ def update_member_tid_in_zebra(
         <PASSWORD>{escape_xml(ZEBRA_PASS)}</PASSWORD>
     </PERMISSION>
 
-    <CARD_TYPE>business_customer</CARD_TYPE>
+    <CARD_TYPE>private_customer</CARD_TYPE>
 
     <IDENTIFIER>
         <ID>{escape_xml(member_id)}</ID>
@@ -1592,15 +1687,14 @@ def api_family_events():
                 "Invalid family_id"
         }), 400
 
-    if (
-        family_id not in
-        PILOT_FAMILY_IDS
+    if not family_session_matches(
+        family_id
     ):
         return jsonify({
             "success": False,
             "error":
-                "Family is not enabled for the pilot"
-        }), 403
+                "יש להזדהות מחדש"
+        }), 401
 
     family = get_family_events(
         family_id
@@ -1775,12 +1869,14 @@ def api_cancel_family_event():
                 "Invalid family or event"
         }), 400
 
-    if family_id not in PILOT_FAMILY_IDS:
+    if not family_session_matches(
+        family_id
+    ):
         return jsonify({
             "success": False,
             "error":
-                "Family is not enabled for the pilot"
-        }), 403
+                "יש להזדהות מחדש"
+        }), 401
 
     try:
         family = get_family_events(
@@ -1985,15 +2081,14 @@ def api_family_members():
                 "Invalid family_id"
         }), 400
 
-    if (
-        family_id not in
-        PILOT_FAMILY_IDS
+    if not family_session_matches(
+        family_id
     ):
         return jsonify({
             "success": False,
             "error":
-                "Family is not enabled for the pilot"
-        }), 403
+                "יש להזדהות מחדש"
+        }), 401
 
     xml_body = f"""
 <ROOT>
@@ -2262,12 +2357,14 @@ def api_update_family_member_id():
                 "Invalid family or member"
         }), 400
 
-    if family_id not in PILOT_FAMILY_IDS:
+    if not family_session_matches(
+        family_id
+    ):
         return jsonify({
             "success": False,
             "error":
-                "Family is not enabled for the pilot"
-        }), 403
+                "יש להזדהות מחדש"
+        }), 401
 
     if (
         not add_missing_leading_zeros and
