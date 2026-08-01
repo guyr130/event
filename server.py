@@ -1193,6 +1193,129 @@ def update_family_event_registration_state_in_zebra(
 
 
 # ======================
+# ARRIVAL CONFIRMATION WRITE
+# ======================
+def update_family_arrival_in_zebra(
+    family_id: str,
+    event_id: str,
+    family_name: str,
+    status: str,
+    arriving: int,
+    confirmed_at: str
+):
+    xml_body = f"""
+<ROOT>
+    <PERMISSION>
+        <USERNAME>{escape_xml(ZEBRA_USER)}</USERNAME>
+        <PASSWORD>{escape_xml(ZEBRA_PASS)}</PASSWORD>
+    </PERMISSION>
+
+    <CARD_TYPE>business_customer</CARD_TYPE>
+
+    <IDENTIFIER>
+        <KEY>USER_CARD_ID</KEY>
+        <VALUE>{escape_xml(family_id)}</VALUE>
+    </IDENTIFIER>
+
+    <CUST_DETAILS>
+        <CO_NAME>{escape_xml(family_name)}</CO_NAME>
+    </CUST_DETAILS>
+
+    <CONNECTION_CARD_DETAILS>
+        <UPDATE_EVEN_CONNECTED>1</UPDATE_EVEN_CONNECTED>
+        <CONNECTION_KEY>ASKEV</CONNECTION_KEY>
+        <KEY>ID</KEY>
+        <VALUE>{escape_xml(event_id)}</VALUE>
+
+        <FIELDS>
+            <A_C>{escape_xml(status)}</A_C>
+            <A_D>{escape_xml(confirmed_at)}</A_D>
+            <NO_ARIVE>{arriving}</NO_ARIVE>
+        </FIELDS>
+    </CONNECTION_CARD_DETAILS>
+</ROOT>
+""".strip()
+
+    response = requests.post(
+        ZEBRA_UPDATE_URL,
+        data=xml_body.encode("utf-8"),
+        headers={
+            "Content-Type":
+                "application/xml"
+        },
+        timeout=15
+    )
+
+    if response.status_code != 200:
+        raise RuntimeError(
+            "Zebra arrival update failed with HTTP "
+            f"{response.status_code}"
+        )
+
+    response_text = (
+        response.text or ""
+    ).strip()
+
+    if not response_text:
+        raise RuntimeError(
+            "מערכת ההזמנות החזירה תשובה ריקה"
+        )
+
+    try:
+        tree = ET.fromstring(
+            response_text
+        )
+
+        message = (
+            tree.findtext(".//msg")
+            or ""
+        ).strip().lower()
+
+        response_identifier = (
+            tree.findtext(".//identifier")
+            or ""
+        ).strip()
+
+        response_errors = tree.findall(
+            ".//errors/error"
+        )
+
+        if not message:
+            raise RuntimeError(
+                "מערכת ההזמנות לא אישרה את עדכון ההגעה"
+            )
+
+        if any(
+            marker in message
+            for marker in (
+                "error",
+                "fail",
+                "not found",
+                "failed",
+                "no information"
+            )
+        ):
+            raise RuntimeError(
+                "מערכת ההזמנות דחתה את עדכון ההגעה"
+            )
+
+        if response_identifier != family_id:
+            raise RuntimeError(
+                "מערכת ההזמנות לא זיהתה את כרטיס המשפחה"
+            )
+
+        if response_errors:
+            raise RuntimeError(
+                "מערכת ההזמנות לא השלימה את עדכון ההגעה"
+            )
+
+    except ET.ParseError:
+        raise RuntimeError(
+            "מערכת ההזמנות החזירה תשובה לא תקינה"
+        )
+
+
+# ======================
 # OPTIONAL ARRIVAL DETAILS FROM ZEBRA
 # ======================
 def get_family_arrival_details(
@@ -2037,6 +2160,225 @@ def api_family_events():
         "events":
             family_events
     })
+
+
+# ======================
+# CONFIRM FAMILY ARRIVAL API
+# ======================
+@app.route(
+    "/api/confirm-family-arrival",
+    methods=["POST"]
+)
+def api_confirm_family_arrival():
+    data = (
+        request.get_json(
+            silent=True
+        ) or {}
+    )
+
+    family_id = str(
+        data.get("family_id") or ""
+    ).strip()
+
+    event_id = str(
+        data.get("event_id") or ""
+    ).strip()
+
+    response_status = str(
+        data.get("status") or ""
+    ).strip().lower()
+
+    arriving = safe_int(
+        data.get("arriving"),
+        0
+    )
+
+    if (
+        not family_id.isdigit() or
+        not event_id.isdigit()
+    ):
+        return jsonify({
+            "success": False,
+            "error":
+                "Invalid family or event"
+        }), 400
+
+    if response_status not in (
+        "arriving",
+        "not_arriving"
+    ):
+        return jsonify({
+            "success": False,
+            "error":
+                "יש לבחור מגיעים או לא מגיעים"
+        }), 400
+
+    if not family_session_matches(
+        family_id
+    ):
+        return jsonify({
+            "success": False,
+            "error":
+                "יש להזדהות מחדש"
+        }), 401
+
+    try:
+        family = get_family_events(
+            family_id
+        )
+
+        if not family:
+            return jsonify({
+                "success": False,
+                "error":
+                    "Family not found in Zebra"
+            }), 404
+
+        family_event = next(
+            (
+                event
+                for event in family.get(
+                    "events",
+                    []
+                )
+                if str(
+                    event.get(
+                        "event_id",
+                        ""
+                    )
+                ).strip() == event_id
+            ),
+            None
+        )
+
+        if not family_event:
+            return jsonify({
+                "success": False,
+                "error":
+                    "Registration not found"
+            }), 404
+
+        if bool(
+            family_event.get(
+                "cancelled",
+                False
+            )
+        ):
+            return jsonify({
+                "success": False,
+                "error":
+                    "הרישום לאירוע בוטל"
+            }), 409
+
+        approved = str(
+            family_event.get(
+                "prov",
+                ""
+            )
+        ).strip() == "1"
+
+        if not approved:
+            return jsonify({
+                "success": False,
+                "error":
+                    "ניתן לאשר הגעה רק לאחר אישור הרישום"
+            }), 409
+
+        registered_tickets = safe_int(
+            family_event.get(
+                "tickets",
+                0
+            ),
+            0
+        )
+
+        if response_status == "arriving":
+            if arriving < 1:
+                return jsonify({
+                    "success": False,
+                    "error":
+                        "יש לבחור את כמות המגיעים"
+                }), 400
+
+            if (
+                registered_tickets > 0 and
+                arriving > registered_tickets
+            ):
+                return jsonify({
+                    "success": False,
+                    "error":
+                        "כמות המגיעים גבוהה מכמות הנרשמים"
+                }), 400
+
+            zebra_status = "אישרו"
+
+        else:
+            arriving = 0
+            zebra_status = "ביטלו"
+
+        now = datetime.now(
+            ZoneInfo(
+                "Asia/Jerusalem"
+            )
+        )
+
+        confirmed_at = now.strftime(
+            "%d/%m/%Y"
+        )
+
+        update_family_arrival_in_zebra(
+            family_id,
+            event_id,
+            family.get(
+                "family_name",
+                ""
+            ),
+            zebra_status,
+            arriving,
+            confirmed_at
+        )
+
+        verified_details = get_family_arrival_details(
+            family_id
+        ).get(
+            event_id,
+            {}
+        )
+
+        verified = (
+            str(
+                verified_details.get(
+                    "arrival_status",
+                    ""
+                )
+            ).strip() == zebra_status and
+            safe_int(
+                verified_details.get(
+                    "arriving",
+                    -1
+                ),
+                -1
+            ) == arriving
+        )
+
+        return jsonify({
+            "success": True,
+            "event_id": event_id,
+            "arrival_status": zebra_status,
+            "arrival_confirmed": (
+                zebra_status == "אישרו"
+            ),
+            "arrival_date": confirmed_at,
+            "arriving": arriving,
+            "zebra_verified": verified
+        })
+
+    except Exception as error:
+        return jsonify({
+            "success": False,
+            "error":
+                str(error)
+        }), 500
 
 
 # ======================
