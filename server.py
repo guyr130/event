@@ -552,6 +552,142 @@ def cancel_family_event_in_zebra(
         )
 
 
+def update_family_event_registration_state_in_zebra(
+    family_id: str,
+    event_id: str,
+    family_name: str,
+    clear_cancellation: bool = False,
+    approve: bool = False
+):
+    fields = []
+
+    if clear_cancellation:
+        fields.append(
+            "<CANCEL_AT>0</CANCEL_AT>"
+        )
+
+    if approve:
+        fields.append(
+            "<PROV>1</PROV>"
+        )
+
+    if not fields:
+        return
+
+    fields_xml = "\n            ".join(
+        fields
+    )
+
+    xml_body = f"""
+<ROOT>
+    <PERMISSION>
+        <USERNAME>{escape_xml(ZEBRA_USER)}</USERNAME>
+        <PASSWORD>{escape_xml(ZEBRA_PASS)}</PASSWORD>
+    </PERMISSION>
+
+    <CARD_TYPE>business_customer</CARD_TYPE>
+
+    <IDENTIFIER>
+        <KEY>USER_CARD_ID</KEY>
+        <VALUE>{escape_xml(family_id)}</VALUE>
+    </IDENTIFIER>
+
+    <CUST_DETAILS>
+        <CO_NAME>{escape_xml(family_name)}</CO_NAME>
+    </CUST_DETAILS>
+
+    <CONNECTION_CARD_DETAILS>
+        <UPDATE_EVEN_CONNECTED>1</UPDATE_EVEN_CONNECTED>
+        <CONNECTION_KEY>ASKEV</CONNECTION_KEY>
+        <KEY>ID</KEY>
+        <VALUE>{escape_xml(event_id)}</VALUE>
+
+        <FIELDS>
+            {fields_xml}
+        </FIELDS>
+    </CONNECTION_CARD_DETAILS>
+</ROOT>
+""".strip()
+
+    response = requests.post(
+        ZEBRA_UPDATE_URL,
+        data=xml_body.encode("utf-8"),
+        headers={
+            "Content-Type":
+                "application/xml"
+        },
+        timeout=15
+    )
+
+    if response.status_code != 200:
+        raise RuntimeError(
+            "Zebra registration update failed with HTTP "
+            f"{response.status_code}"
+        )
+
+    response_text = (
+        response.text or ""
+    ).strip()
+
+    if not response_text:
+        raise RuntimeError(
+            "מערכת ההזמנות החזירה תשובה ריקה"
+        )
+
+    try:
+        tree = ET.fromstring(
+            response_text
+        )
+
+        message = (
+            tree.findtext(".//msg")
+            or ""
+        ).strip().lower()
+
+        response_identifier = (
+            tree.findtext(".//identifier")
+            or ""
+        ).strip()
+
+        response_errors = tree.findall(
+            ".//errors/error"
+        )
+
+        if not message:
+            raise RuntimeError(
+                "מערכת ההזמנות לא אישרה את העדכון"
+            )
+
+        if any(
+            marker in message
+            for marker in (
+                "error",
+                "fail",
+                "not found",
+                "failed",
+                "no information"
+            )
+        ):
+            raise RuntimeError(
+                "מערכת ההזמנות דחתה את העדכון"
+            )
+
+        if response_identifier != family_id:
+            raise RuntimeError(
+                "מערכת ההזמנות לא זיהתה את כרטיס המשפחה"
+            )
+
+        if response_errors:
+            raise RuntimeError(
+                "מערכת ההזמנות לא השלימה את העדכון"
+            )
+
+    except ET.ParseError:
+        raise RuntimeError(
+            "מערכת ההזמנות החזירה תשובה לא תקינה"
+        )
+
+
 # ======================
 # FAMILY EVENTS FROM ZEBRA
 # ======================
@@ -582,6 +718,7 @@ def get_family_events(
                 <EV_D></EV_D>
                 <EVE_HOUR></EVE_HOUR>
                 <EVE_LOC></EVE_LOC>
+                <AUTO_PROV></AUTO_PROV>
             </FIELDS>
 
             <CON_FIELDS>
@@ -690,6 +827,12 @@ def get_family_events(
                 ) or ""
             ).strip()
 
+            auto_prov = (
+                connection.findtext(
+                    ".//FIELDS/AUTO_PROV"
+                ) or ""
+            ).strip()
+
             events.append({
                 "event_id":
                     event_id,
@@ -715,6 +858,12 @@ def get_family_events(
                 "inviter_name":
                     inviter_name,
 
+                "auto_prov": (
+                    normalize_status(
+                        auto_prov
+                    ) == "yes"
+                ),
+
                 "cancelled": (
                     cancel_at == "1"
                 )
@@ -730,6 +879,88 @@ def get_family_events(
         "events":
             events
     }
+
+
+def apply_family_event_automation(
+    family
+):
+    if not family:
+        return False
+
+    family_id = str(
+        family.get(
+            "family_id",
+            ""
+        )
+    ).strip()
+
+    family_name = str(
+        family.get(
+            "family_name",
+            ""
+        )
+    ).strip()
+
+    updated = False
+
+    for event in family.get(
+        "events",
+        []
+    ):
+        tickets = safe_int(
+            event.get(
+                "tickets",
+                0
+            ),
+            0
+        )
+
+        if tickets <= 0:
+            continue
+
+        event_id = str(
+            event.get(
+                "event_id",
+                ""
+            )
+        ).strip()
+
+        if not event_id:
+            continue
+
+        clear_cancellation = bool(
+            event.get(
+                "cancelled",
+                False
+            )
+        )
+
+        approve = bool(
+            event.get(
+                "auto_prov",
+                False
+            )
+        ) and str(
+            event.get(
+                "prov",
+                ""
+            )
+        ).strip() != "1"
+
+        if not clear_cancellation and not approve:
+            continue
+
+        update_family_event_registration_state_in_zebra(
+            family_id=family_id,
+            event_id=event_id,
+            family_name=family_name,
+            clear_cancellation=clear_cancellation,
+            approve=approve
+        )
+
+        updated = True
+
+    return updated
 
 
 def filter_events(
@@ -973,6 +1204,20 @@ def api_family_events():
                 "Family not found in Zebra"
         }), 404
 
+    if apply_family_event_automation(
+        family
+    ):
+        family = get_family_events(
+            family_id
+        )
+
+        if not family:
+            return jsonify({
+                "success": False,
+                "error":
+                    "Family not found after Zebra update"
+            }), 502
+
     family_events = []
 
     for event in family.get(
@@ -1035,6 +1280,13 @@ def api_family_events():
 
             "approved": (
                 prov == "1"
+            ),
+
+            "auto_approval": bool(
+                event.get(
+                    "auto_prov",
+                    False
+                )
             ),
 
             "inviter_name": str(
